@@ -233,12 +233,17 @@ function MarketBubbles({scores,DATA}){
   const maxPct=Math.max(...markets.map(m=>m.pct));
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
-    const ctx=canvas.getContext("2d");
-    const W=canvas.width,H=canvas.height;
-    // 較小泡泡
+    const dpr=window.devicePixelRatio||1;
+    const displayW=canvas.offsetWidth||340;
+    const displayH=130;
+    canvas.width=displayW*dpr;canvas.height=displayH*dpr;
+    canvas.style.width=displayW+"px";canvas.style.height=displayH+"px";
+    const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+    const W=displayW,H=displayH;
+    // 縮小3倍：最大半徑從40→13
     const bubbles=markets.map((m,i)=>{
-      const baseR=18+(m.pct/maxPct)*22;
-      return{...m,baseR,r:baseR,x:W*(0.18+i*0.32),y:H*0.5,vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,phase:Math.random()*Math.PI*2};
+      const baseR=7+(m.pct/maxPct)*6;
+      return{...m,baseR,r:baseR,x:W*(0.18+i*0.32),y:H*0.5,vx:(Math.random()-0.5)*0.25,vy:(Math.random()-0.5)*0.25,phase:Math.random()*Math.PI*2};
     });
     // 神經網絡節點（固定輔助節點）
     const nodes=[
@@ -332,12 +337,18 @@ function IndicatorBubbles({DATA}){
   const maxAbs=Math.max(...withChange.map(i=>Math.abs(i.chg)),0.01);
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
-    const ctx=canvas.getContext("2d");const W=canvas.width,H=canvas.height;
-    // 較小半徑
+    const dpr=window.devicePixelRatio||1;
+    const displayW=canvas.offsetWidth||340;
+    const displayH=200;
+    canvas.width=displayW*dpr;canvas.height=displayH*dpr;
+    canvas.style.width=displayW+"px";canvas.style.height=displayH+"px";
+    const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+    const W=displayW,H=displayH;
+    // 縮小3倍：最大半徑從26→9
     const bubbles=withChange.map((item,i)=>{
-      const baseR=10+(Math.abs(item.chg)/maxAbs)*16;
+      const baseR=4+(Math.abs(item.chg)/maxAbs)*5;
       const col=4,colW=W/col,rowH=H/3;
-      return{...item,baseR,r:baseR,x:(i%col)*colW+colW/2,y:Math.floor(i/col)*rowH+rowH/2,vx:(Math.random()-0.5)*0.4,vy:(Math.random()-0.5)*0.4,phase:Math.random()*Math.PI*2};
+      return{...item,baseR,r:baseR,x:(i%col)*colW+colW/2,y:Math.floor(i/col)*rowH+rowH/2,vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,phase:Math.random()*Math.PI*2};
     });
     let frame=0,raf;
     const draw=()=>{
@@ -406,6 +417,8 @@ function App(){
   const [DATA,setDATA]=useState(FALLBACK);
   const [loading,setLoading]=useState(true);
   const [lastFetch,setLastFetch]=useState(null);
+  const [collapsed,setCollapsed]=useState({});
+  const toggle=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
 
   useEffect(()=>{
     if(!authed)return;
@@ -425,6 +438,11 @@ function App(){
   const ff=DATA.FEDFUNDS;
   const rate=ff.value<ff.prev?"降息":ff.value>ff.prev?"升息":"持平";
   const CARDS=[{k:"WALCL",c:C.green},{k:"M2SL",c:C.green},{k:"FEDFUNDS",c:C.cyan},{k:"RRPONTSYD",c:C.cyan},{k:"DGS2",c:C.purple},{k:"DGS10",c:C.purple},{k:"VIX",c:C.red},{k:"DXY",c:C.orange},{k:"GOLD",c:C.yellow},{k:"BTC_D",c:C.orange},{k:"USDT_D",c:C.green},{k:"USDC_D",c:C.cyan}];
+  const H_FULL=120,PAD_L=52,PAD_R=12,PAD_T=8,PAD_B=20,W=560;
+  const makePath=(obs,h)=>{
+    const vals=obs.map(o=>o.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+    return{pts:obs.map((o,i,a)=>{const x=PAD_L+(i/(a.length-1))*(W-PAD_L-PAD_R),y=PAD_T+(1-(o.value-mn)/rng)*(h-PAD_T-PAD_B);return`${x},${y}`;}).join(" "),mn,mx,lastY:PAD_T+(1-(obs[obs.length-1].value-mn)/rng)*(h-PAD_T-PAD_B)};
+  };
 
   return(
     <div style={{minHeight:"100vh",background:C.bg,color:C.text,paddingBottom:40}}>
@@ -518,94 +536,81 @@ function App(){
             })}
           </div>
         )}
-        {tab==="history"&&(()=>{
-          const [collapsed,setCollapsed]=useState({});
-          const toggle=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
-          const H_FULL=120,PAD_L=52,PAD_R=12,PAD_T=8,PAD_B=20,W=560;
-          const makePath=(obs,h)=>{
-            const vals=obs.map(o=>o.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
-            return{pts:obs.map((o,i,a)=>{const x=PAD_L+(i/(a.length-1))*(W-PAD_L-PAD_R),y=PAD_T+(1-(o.value-mn)/rng)*(h-PAD_T-PAD_B);return`${x},${y}`;}).join(" "),mn,mx,rng,lastY:PAD_T+(1-(obs[obs.length-1].value-mn)/rng)*(h-PAD_T-PAD_B)};
-          };
-          return(
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {/* 情緒歷史 */}
-              {(()=>{
-                const isCol=collapsed["__score"];
-                const H=isCol?0:H_FULL;
-                const cfg=[{k:"stock",c:C.green,l:"STOCK"},{k:"crypto",c:C.cyan,l:"CRYPTO"},{k:"gold",c:C.yellow,l:"GOLD"}];
-                const toPath=k=>SCORE_HIST.map((d,i)=>{const x=PAD_L+(i/(SCORE_HIST.length-1))*(W-PAD_L-PAD_R),y=H_FULL/2-(d[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
-                return(
-                  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:12,position:"relative"}}>
-                    <GlitchBorder color={C.dim}/>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:8}}>
-                      <div style={{fontSize:9,color:C.muted,letterSpacing:3}}>//SENTIMENT_60D</div>
-                      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                        {!isCol&&cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:12,height:1.5,background:c}}/><span style={{fontSize:8,color:C.muted}}>{l}</span></div>))}
-                        <button onClick={()=>toggle("__score")} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[EXPAND]":"[FOLD]"}</button>
-                      </div>
+        {tab==="history"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* 情緒歷史 */}
+            {(()=>{
+              const isCol=collapsed["__score"];
+              const cfg=[{k:"stock",c:C.green,l:"STOCK"},{k:"crypto",c:C.cyan,l:"CRYPTO"},{k:"gold",c:C.yellow,l:"GOLD"}];
+              const toPath=k=>SCORE_HIST.map((d,i)=>{const x=PAD_L+(i/(SCORE_HIST.length-1))*(W-PAD_L-PAD_R),y=H_FULL/2-(d[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+              return(
+                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:12,position:"relative"}}>
+                  <GlitchBorder color={C.dim}/>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:8}}>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:3}}>//SENTIMENT_60D</div>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                      {!isCol&&cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:12,height:1.5,background:c}}/><span style={{fontSize:8,color:C.muted}}>{l}</span></div>))}
+                      <button onClick={()=>toggle("__score")} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[EXPAND]":"[FOLD]"}</button>
                     </div>
-                    {!isCol&&<>
-                      <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
-                        <line x1={PAD_L} y1={H_FULL/2} x2={W-PAD_R} y2={H_FULL/2} stroke={C.dim} strokeWidth={0.5} strokeDasharray="4 4"/>
-                        {[50,-50].map(v=>{const y=H_FULL/2-(v/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={v}><line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.3} strokeDasharray="2 6"/><text x={PAD_L-4} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text></g>;})}
-                        <text x={PAD_L-4} y={H_FULL/2+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">0</text>
-                        {cfg.map(({k,c})=>{const last=SCORE_HIST[SCORE_HIST.length-1];const lx=PAD_L+(W-PAD_L-PAD_R),ly=H_FULL/2-(last[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;})}
-                      </svg>
-                      <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                        <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[0]?.date}</span>
-                        <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[SCORE_HIST.length-1]?.date}</span>
-                      </div>
-                    </>}
                   </div>
-                );
-              })()}
-              {/* 各指標曲線 */}
-              {CARDS.map(({k,c})=>{
-                const obs=HIST[k],d=DATA[k];if(!obs||!d)return null;
-                const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
-                const isCol=collapsed[k];
-                const {pts,mn,mx,lastY}=makePath(obs,H_FULL);
-                // Y軸刻度
-                const steps=4;
-                const yTicks=Array.from({length:steps+1},(_,i)=>{const v=mn+(mx-mn)*i/steps;const y=PAD_T+(1-(v-mn)/(mx-mn||1))*(H_FULL-PAD_T-PAD_B);return{v,y};});
-                return(
-                  <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"10px 12px",position:"relative"}}>
-                    <GlitchBorder color={c}/>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:6}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:10,color:C.muted}}>{d.name}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:c,textShadow:`0 0 5px ${c}`}}>{d.value.toFixed(dec)} {d.unit}</span>
-                      </div>
-                      <button onClick={()=>toggle(k)} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[▼]":"[▲]"}</button>
+                  {!isCol&&<>
+                    <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
+                      <line x1={PAD_L} y1={H_FULL/2} x2={W-PAD_R} y2={H_FULL/2} stroke={C.dim} strokeWidth={0.5} strokeDasharray="4 4"/>
+                      {[50,-50].map(v=>{const y=H_FULL/2-(v/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={v}><line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.3} strokeDasharray="2 6"/><text x={PAD_L-4} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text></g>;})}
+                      <text x={PAD_L-4} y={H_FULL/2+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">0</text>
+                      {cfg.map(({k,c})=>{const last=SCORE_HIST[SCORE_HIST.length-1];const lx=PAD_L+(W-PAD_L-PAD_R),ly=H_FULL/2-(last[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;})}
+                    </svg>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+                      <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[0]?.date}</span>
+                      <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[SCORE_HIST.length-1]?.date}</span>
                     </div>
-                    {!isCol&&<>
-                      <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
-                        {/* Y軸 */}
-                        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H_FULL-PAD_B} stroke={C.dim} strokeWidth={0.5}/>
-                        {yTicks.map(({v,y},i)=>(
-                          <g key={i}>
-                            <line x1={PAD_L-3} y1={y} x2={PAD_L} y2={y} stroke={C.dim} strokeWidth={0.5}/>
-                            <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="3 8"/>
-                            <text x={PAD_L-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={6.5} fontFamily="Share Tech Mono,monospace">
-                              {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(dec>0?1:0)}
-                            </text>
-                          </g>
-                        ))}
-                        {/* 曲線 */}
-                        <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
-                        <circle cx={W-PAD_R} cy={lastY} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
-                      </svg>
-                      <div style={{display:"flex",justifyContent:"space-between",marginTop:2,paddingLeft:PAD_L}}>
-                        <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
-                        <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
-                      </div>
-                    </>}
+                  </>}
+                </div>
+              );
+            })()}
+            {/* 各指標曲線 */}
+            {CARDS.map(({k,c})=>{
+              const obs=HIST[k],d=DATA[k];if(!obs||!d)return null;
+              const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
+              const isCol=collapsed[k];
+              const {pts,mn,mx,lastY}=makePath(obs,H_FULL);
+              const steps=4;
+              const yTicks=Array.from({length:steps+1},(_,i)=>{const v=mn+(mx-mn)*i/steps;const y=PAD_T+(1-(v-mn)/(mx-mn||1))*(H_FULL-PAD_T-PAD_B);return{v,y};});
+              return(
+                <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"10px 12px",position:"relative"}}>
+                  <GlitchBorder color={c}/>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,color:C.muted}}>{d.name}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:c,textShadow:`0 0 5px ${c}`}}>{d.value.toFixed(dec)} {d.unit}</span>
+                    </div>
+                    <button onClick={()=>toggle(k)} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[▼]":"[▲]"}</button>
                   </div>
-                );
-              })}
-            </div>
-          );
-        })()}
+                  {!isCol&&<>
+                    <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
+                      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H_FULL-PAD_B} stroke={C.dim} strokeWidth={0.5}/>
+                      {yTicks.map(({v,y},i)=>(
+                        <g key={i}>
+                          <line x1={PAD_L-3} y1={y} x2={PAD_L} y2={y} stroke={C.dim} strokeWidth={0.5}/>
+                          <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="3 8"/>
+                          <text x={PAD_L-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={6.5} fontFamily="Share Tech Mono,monospace">
+                            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(dec>0?1:0)}
+                          </text>
+                        </g>
+                      ))}
+                      <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
+                      <circle cx={W-PAD_R} cy={lastY} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
+                    </svg>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:2,paddingLeft:PAD_L}}>
+                      <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
+                      <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
+                    </div>
+                  </>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
