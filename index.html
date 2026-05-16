@@ -7,33 +7,49 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#05050a;color:#e0e0ff;font-family:'Share Tech Mono',monospace;overflow-x:hidden}
-::-webkit-scrollbar{width:3px}
-::-webkit-scrollbar-thumb{background:#1a1a3a;border-radius:0}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#1a1a3a}
 @keyframes scan{0%{left:-100%}100%{left:100%}}
 @keyframes fi{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes sk{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @keyframes pu{0%,100%{opacity:.3}50%{opacity:1}}
-@keyframes spin{to{transform:rotate(360deg)}}
 .fi{animation:fi .6s ease forwards}
 .sk{animation:sk .4s ease}
 .pu{animation:pu 2s ease infinite}
 input:focus{outline:none}
 button{font-family:'Share Tech Mono',monospace;cursor:pointer}
+canvas{display:block}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef}=React;
+const {useState,useEffect,useRef,useCallback}=React;
 const PASSWORD="Ericzone";
-const C={bg:"#05050a",bg2:"#0a0a14",panel:"#0d0d1a",border:"#1a1a3a",cyan:"#00f5ff",pink:"#ff006e",yellow:"#ffe600",purple:"#9d00ff",green:"#00ff9f",orange:"#ff6b00",red:"#ff2d55",dim:"#3a3a5c",text:"#e0e0ff",muted:"#5a5a8a"};
+const C={bg:"#05050a",bg2:"#0a0a14",panel:"#0d0d1a",border:"#1a1a3a",
+  cyan:"#00f5ff",pink:"#ff006e",yellow:"#ffe600",purple:"#9d00ff",
+  green:"#00ff9f",orange:"#ff6b00",red:"#ff2d55",dim:"#3a3a5c",
+  text:"#e0e0ff",muted:"#5a5a8a"};
 
-// 預設數據（API 抓不到時的備用）
-const FALLBACK={WALCL:{value:6719,prev:6700,unit:"十億USD",name:"聯準會資產負債表"},M2SL:{value:21580,prev:21540,unit:"十億USD",name:"M2 貨幣供給"},FEDFUNDS:{value:4.33,prev:4.33,unit:"%",name:"聯邦基金利率"},RRPONTSYD:{value:165,prev:180,unit:"十億USD",name:"隔夜逆回購"},DGS2:{value:3.97,prev:3.95,unit:"%",name:"2Y殖利率"},DGS10:{value:4.48,prev:4.46,unit:"%",name:"10Y殖利率"},VIX:{value:18.43,prev:17.90,unit:"",name:"VIX 恐慌指數"},DXY:{value:99.27,prev:98.60,unit:"",name:"美元指數"},GOLD:{value:4562,prev:4693,unit:"USD/oz",name:"黃金"},BTC_D:{value:58.2,prev:58.4,unit:"%",name:"BTC 主導率"},USDT_D:{value:6.5,prev:6.4,unit:"%",name:"USDT 主導率"},USDC_D:{value:2.8,prev:2.7,unit:"%",name:"USDC 主導率"},date:"2026-05-16"};
+const FALLBACK={
+  WALCL:{value:6719,prev:6700,unit:"十億USD",name:"聯準會資產負債表"},
+  M2SL:{value:21580,prev:21540,unit:"十億USD",name:"M2 貨幣供給"},
+  FEDFUNDS:{value:4.33,prev:4.33,unit:"%",name:"聯邦基金利率"},
+  RRPONTSYD:{value:165,prev:180,unit:"十億USD",name:"隔夜逆回購"},
+  DGS2:{value:3.97,prev:3.95,unit:"%",name:"2Y殖利率"},
+  DGS10:{value:4.48,prev:4.46,unit:"%",name:"10Y殖利率"},
+  VIX:{value:18.43,prev:17.90,unit:"",name:"VIX 恐慌指數"},
+  DXY:{value:99.27,prev:98.60,unit:"",name:"美元指數"},
+  GOLD:{value:4562,prev:4693,unit:"USD/oz",name:"黃金"},
+  BTC_D:{value:58.2,prev:58.4,unit:"%",name:"BTC 主導率"},
+  USDT_D:{value:6.5,prev:6.4,unit:"%",name:"USDT 主導率"},
+  USDC_D:{value:2.8,prev:2.7,unit:"%",name:"USDC 主導率"},
+  date:"2026-05-16"
+};
 
 function sdelta(v,p,dir){if(!v||!p||p===0)return 0;return Math.max(-1,Math.min(1,((v-p)/Math.abs(p))*100*dir));}
 function getScores(d){
@@ -60,7 +76,7 @@ function buildHistory(DATA){
     for(let i=59;i>=0;i--){
       const noise=(seed(ki*100+i)-0.48)*Math.abs(trend||cur*0.006)*4;
       const val=cur-trend*(i/59)+noise*(i/60);
-      const d=new Date(DATA.date||new Date());d.setDate(d.getDate()-i);
+      const d=new Date(DATA.date||"2026-05-16");d.setDate(d.getDate()-i);
       pts.push({date:d.toISOString().slice(0,10),value:Math.max(0.01,val)});
     }
     pts[58].value=prev;pts[59].value=cur;hist[k]=pts;
@@ -75,11 +91,37 @@ function buildScoreHist(hist,DATA){
   });
 }
 
+// ── 高清 Canvas Hook ─────────────────────────────────────
+function useHiDpiCanvas(drawFn,deps){
+  const ref=useRef(null);
+  useEffect(()=>{
+    const canvas=ref.current;if(!canvas)return;
+    const dpr=window.devicePixelRatio||1;
+    const rect=canvas.getBoundingClientRect();
+    const W=rect.width||canvas.offsetWidth||400;
+    const H=rect.height||canvas.offsetHeight||300;
+    canvas.width=Math.round(W*dpr);
+    canvas.height=Math.round(H*dpr);
+    canvas.style.width=W+"px";
+    canvas.style.height=H+"px";
+    const ctx=canvas.getContext("2d");
+    ctx.scale(dpr,dpr);
+    let raf;
+    const loop=()=>{drawFn(ctx,W,H);raf=requestAnimationFrame(loop);};
+    loop();
+    return()=>cancelAnimationFrame(raf);
+  },deps);
+  return ref;
+}
+
+// ── UI 工具元件 ──────────────────────────────────────────
 const GlitchBorder=({color=C.cyan})=>(
-  <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none",borderRadius:4}}>
-    {[[{top:0,left:0,width:12,height:2},{top:0,left:0,width:2,height:12}],[{top:0,right:0,width:12,height:2},{top:0,right:0,width:2,height:12}],[{bottom:0,left:0,width:12,height:2},{bottom:0,left:0,width:2,height:12}],[{bottom:0,right:0,width:12,height:2},{bottom:0,right:0,width:2,height:12}]].flat().map((s,i)=>(
-      <div key={i} style={{position:"absolute",background:color,...s}}/>
-    ))}
+  <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none"}}>
+    {[[{top:0,left:0,width:10,height:2},{top:0,left:0,width:2,height:10}],
+      [{top:0,right:0,width:10,height:2},{top:0,right:0,width:2,height:10}],
+      [{bottom:0,left:0,width:10,height:2},{bottom:0,left:0,width:2,height:10}],
+      [{bottom:0,right:0,width:10,height:2},{bottom:0,right:0,width:2,height:10}]
+    ].flat().map((s,i)=><div key={i} style={{position:"absolute",background:color,...s}}/>)}
   </div>
 );
 
@@ -110,49 +152,20 @@ function Login({onLogin}){
 function Gauge({label,value,color}){
   const pct=(value+100)/200;
   return(
-    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"10px 8px",position:"relative"}}>
+    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"12px 10px",position:"relative"}}>
       <GlitchBorder color={color}/>
-      <div style={{fontSize:16,fontWeight:700,color,fontFamily:"'Share Tech Mono',monospace",marginBottom:6,textShadow:`0 0 10px ${color}88`}}>{value>0?"+":""}{value}</div>
-      <div style={{position:"relative",height:6,borderRadius:2,background:"#111",marginBottom:4}}>
-        <div style={{position:"absolute",left:"50%",top:-1,width:1,height:8,background:C.dim}}/>
-        {value>=0?<div style={{position:"absolute",left:"50%",top:0,width:`${(pct-0.5)*100}%`,height:"100%",background:color,boxShadow:`0 0 6px ${color}`}}/>:<div style={{position:"absolute",right:"50%",top:0,width:`${(0.5-pct)*100}%`,height:"100%",background:color,opacity:.7,boxShadow:`0 0 6px ${color}`}}/>}
-        <div style={{position:"absolute",top:-3,left:`${pct*100}%`,transform:"translateX(-50%)",width:5,height:12,borderRadius:1,background:color,boxShadow:`0 0 8px ${color}`}}/>
+      <div style={{fontSize:20,fontWeight:700,color,fontFamily:"'Share Tech Mono',monospace",marginBottom:8,textShadow:`0 0 10px ${color}88`}}>{value>0?"+":""}{value}</div>
+      <div style={{position:"relative",height:8,borderRadius:2,background:"#111",marginBottom:5}}>
+        <div style={{position:"absolute",left:"50%",top:-2,width:1,height:12,background:C.dim}}/>
+        {value>=0?<div style={{position:"absolute",left:"50%",top:0,width:`${(pct-0.5)*100}%`,height:"100%",background:color,boxShadow:`0 0 6px ${color}`}}/>
+          :<div style={{position:"absolute",right:"50%",top:0,width:`${(0.5-pct)*100}%`,height:"100%",background:color,opacity:.7,boxShadow:`0 0 6px ${color}`}}/>}
+        <div style={{position:"absolute",top:-4,left:`${pct*100}%`,transform:"translateX(-50%)",width:6,height:16,borderRadius:1,background:color,boxShadow:`0 0 8px ${color}`}}/>
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:C.muted,marginBottom:4}}>
-        <span>-100</span><span>0</span><span>+100</span>
-      </div>
-      <div style={{fontSize:8,color:C.muted,letterSpacing:1}}>{label}</div>
-      <div style={{fontSize:8,marginTop:4,padding:"1px 6px",borderRadius:2,display:"inline-block",border:`1px solid ${value>20?C.green:value<-20?C.red:C.yellow}`,color:value>20?C.green:value<-20?C.red:C.yellow}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted,marginBottom:5}}><span>-100</span><span>0</span><span>+100</span></div>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:1,marginBottom:4}}>{label}</div>
+      <div style={{fontSize:9,padding:"2px 8px",borderRadius:2,display:"inline-block",border:`1px solid ${value>20?C.green:value<-20?C.red:C.yellow}`,color:value>20?C.green:value<-20?C.red:C.yellow}}>
         {value>20?"BULL":value<-20?"BEAR":"NEUTRAL"}
       </div>
-    </div>
-  );
-}
-
-function MiniLine({data,color,h=40}){
-  if(!data||data.length<2)return<div style={{height:h,background:"#111",borderRadius:2}}/>;
-  const vals=data.map(d=>d.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
-  const pts=data.map((d,i,a)=>{const x=(i/(a.length-1))*220,y=h-((d.value-mn)/rng)*(h-4)-2;return`${x},${y}`;}).join(" ");
-  const lastX=220, lastY=h-((data[data.length-1].value-mn)/rng)*(h-4)-2;
-  return(<svg width="100%" height={h} viewBox={`0 0 220 ${h}`} preserveAspectRatio="none">
-    <polyline points={pts} fill="none" stroke={color} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${color})`}}/>
-    <circle cx={lastX} cy={lastY} r={2} fill={color} style={{filter:`drop-shadow(0 0 3px ${color})`}}/>
-  </svg>);
-}
-
-function Card({name,value,prev,unit,hist,color}){
-  const chg=value-prev,pct=prev?(chg/Math.abs(prev))*100:0;
-  const dec=unit==="%"?2:unit==="十億USD"?0:unit==="USD/oz"?1:3;
-  return(
-    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:12,position:"relative"}}>
-      <GlitchBorder color={color}/>
-      <div style={{fontSize:9,color:C.muted,marginBottom:4,letterSpacing:1}}>{name}</div>
-      <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:6}}>
-        <span style={{fontSize:16,fontWeight:700,color,textShadow:`0 0 8px ${color}66`}}>{value.toFixed(dec)}</span>
-        <span style={{fontSize:9,color:C.muted}}>{unit}</span>
-        <span style={{fontSize:9,color:chg>0?C.green:C.red,marginLeft:"auto"}}>{chg>0?"▲":"▼"}{Math.abs(pct).toFixed(2)}%</span>
-      </div>
-      <MiniLine data={hist||[]} color={color} h={36}/>
     </div>
   );
 }
@@ -161,7 +174,7 @@ function Donut({scores}){
   const alloc=getAlloc(scores);
   const items=[{label:"STOCK",v:alloc.stock,color:C.green,base:55,adj:Math.round(scores.stock/100*10)},{label:"GOLD",v:alloc.gold,color:C.yellow,base:35,adj:Math.round(scores.gold/100*10)},{label:"CRYPTO",v:alloc.crypto,color:C.cyan,base:10,adj:Math.round(scores.crypto/100*10)}];
   const total=items.reduce((s,i)=>s+i.v,0)||1;
-  const cx=70,cy=70,r=55,ir=33;let cum=-90;
+  const cx=75,cy=75,r=60,ir=36;let cum=-90;
   const slices=items.map(item=>{
     const ang=(item.v/total)*360,sa=cum,ea=cum+ang;cum+=ang;
     const tr=d=>d*Math.PI/180;
@@ -171,24 +184,25 @@ function Donut({scores}){
     return{...item,d:`M${ix1} ${iy1} L${x1} ${y1} A${r} ${r} 0 ${lg} 1 ${x2} ${y2} L${ix2} ${iy2} A${ir} ${ir} 0 ${lg} 0 ${ix1} ${iy1}Z`};
   });
   return(
-    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,position:"relative"}}>
+    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:18,position:"relative"}}>
       <GlitchBorder color={C.purple}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:12}}>//CAPITAL_FLOW::ESTIMATE</div>
-      <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-        <svg width={140} height={140} viewBox="0 0 140 140">
-          {slices.map((s,i)=><path key={i} d={s.d} fill={s.color} opacity={.75} style={{filter:`drop-shadow(0 0 4px ${s.color})`}}/>)}
+      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:4}}>//CAPITAL_FLOW::ESTIMATE</div>
+      <div style={{fontSize:9,color:C.dim,marginBottom:14}}>市值加權基礎（股票55 / 黃金35 / 加密10）± 情緒微調</div>
+      <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
+        <svg width={150} height={150} viewBox="0 0 150 150">
+          {slices.map((s,i)=><path key={i} d={s.d} fill={s.color} opacity={.8} style={{filter:`drop-shadow(0 0 4px ${s.color})`}}/>)}
           <circle cx={cx} cy={cy} r={ir-2} fill={C.bg}/>
-          <text x={cx} y={cy-4} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="Share Tech Mono,monospace">ALLOC</text>
+          <text x={cx} y={cy+3} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="Share Tech Mono,monospace">ALLOC</text>
         </svg>
-        <div style={{display:"flex",flexDirection:"column",gap:10,flex:1}}>
+        <div style={{display:"flex",flexDirection:"column",gap:12,flex:1}}>
           {slices.map((s,i)=>(
             <div key={i}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{width:8,height:8,background:s.color,boxShadow:`0 0 6px ${s.color}`}}/>
-                <span style={{fontSize:11,color:C.text}}>{s.label}</span>
-                <span style={{fontSize:18,fontWeight:700,color:s.color,marginLeft:"auto",textShadow:`0 0 10px ${s.color}`}}>{s.v}%</span>
+                <div style={{width:10,height:10,background:s.color,boxShadow:`0 0 6px ${s.color}`}}/>
+                <span style={{fontSize:12,color:C.text}}>{s.label}</span>
+                <span style={{fontSize:20,fontWeight:700,color:s.color,fontFamily:"'Share Tech Mono',monospace",marginLeft:"auto",textShadow:`0 0 10px ${s.color}`}}>{s.v}%</span>
               </div>
-              <div style={{fontSize:8,color:C.muted,marginLeft:16}}>BASE:{s.base}% | ADJ:{s.adj>=0?"+":""}{s.adj}%</div>
+              <div style={{fontSize:9,color:C.muted,marginLeft:18,marginTop:1}}>BASE:{s.base}% ADJ:{s.adj>=0?"+":""}{s.adj}%</div>
             </div>
           ))}
         </div>
@@ -197,28 +211,267 @@ function Donut({scores}){
   );
 }
 
+// ── 散佈泡泡圖（參考樣板：有座標軸）────────────────────
+function ScatterBubbles({DATA,scores}){
+  const alloc=getAlloc(scores);
+  const frameRef=useRef(0);
+
+  // 市場泡泡資料（x=情緒分數, y=資金佔比, size=市值權重）
+  const markets=[
+    {id:"stock",label:"STOCK",x:scores.stock,y:alloc.stock,size:55,color:C.green},
+    {id:"gold", label:"GOLD", x:scores.gold, y:alloc.gold, size:35,color:C.yellow},
+    {id:"crypto",label:"CRYPTO",x:scores.crypto,y:alloc.crypto,size:10,color:C.cyan},
+  ];
+
+  // 指標泡泡（x=變化率, y=指標分組位置, size=|變化率|）
+  const indItems=[
+    {key:"WALCL",label:"WALCL",group:0,color:C.green},
+    {key:"M2SL",label:"M2",group:0,color:C.green},
+    {key:"FEDFUNDS",label:"RATE",group:1,color:C.cyan},
+    {key:"RRPONTSYD",label:"RRP",group:1,color:C.cyan},
+    {key:"DGS2",label:"2Y",group:2,color:C.purple},
+    {key:"DGS10",label:"10Y",group:2,color:C.purple},
+    {key:"VIX",label:"VIX",group:3,color:C.red},
+    {key:"DXY",label:"DXY",group:3,color:C.orange},
+    {key:"GOLD",label:"GOLD",group:4,color:C.yellow},
+    {key:"BTC_D",label:"BTC.D",group:4,color:C.orange},
+    {key:"USDT_D",label:"USDT.D",group:5,color:C.green},
+    {key:"USDC_D",label:"USDC.D",group:5,color:C.cyan},
+  ].map(item=>{
+    const d=DATA[item.key];
+    const chg=d?.prev?((d.value-d.prev)/Math.abs(d.prev))*100:0;
+    return{...item,chg,up:chg>=0};
+  });
+  const maxChg=Math.max(...indItems.map(i=>Math.abs(i.chg)),0.01);
+
+  // ── 散佈圖 canvas ──
+  const drawScatter=useCallback((ctx,W,H)=>{
+    frameRef.current++;
+    const f=frameRef.current;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
+
+    const PL=50,PR=20,PT=20,PB=40;
+    const cW=W-PL-PR,cH=H-PT-PB;
+
+    // 網格
+    ctx.strokeStyle=C.border;ctx.lineWidth=0.5;
+    for(let i=0;i<=4;i++){
+      const x=PL+cW*i/4,y=PT+cH*i/4;
+      ctx.beginPath();ctx.moveTo(x,PT);ctx.lineTo(x,PT+cH);ctx.globalAlpha=0.3;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(PL,y);ctx.lineTo(PL+cW,y);ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+
+    // X 軸（情緒 -100~+100）
+    ctx.fillStyle=C.muted;ctx.font=`10px 'Share Tech Mono',monospace`;ctx.textAlign="center";
+    [-100,-50,0,50,100].forEach(v=>{
+      const x=PL+((v+100)/200)*cW;
+      ctx.fillText(v,x,H-8);
+      ctx.strokeStyle=C.dim;ctx.lineWidth=0.4;
+      ctx.beginPath();ctx.moveTo(x,PT+cH);ctx.lineTo(x,PT+cH+4);ctx.globalAlpha=1;ctx.stroke();
+    });
+    ctx.fillStyle=C.muted;ctx.font=`9px 'Share Tech Mono',monospace`;ctx.textAlign="center";
+    ctx.fillText("SENTIMENT SCORE →",PL+cW/2,H-22);
+
+    // Y 軸（佔比 0~100）
+    ctx.textAlign="right";
+    [0,25,50,75,100].forEach(v=>{
+      const y=PT+cH*(1-v/100);
+      ctx.fillStyle=C.muted;ctx.font=`10px 'Share Tech Mono',monospace`;
+      ctx.fillText(v+"%",PL-6,y+4);
+      ctx.strokeStyle=C.dim;ctx.lineWidth=0.4;
+      ctx.beginPath();ctx.moveTo(PL-4,y);ctx.lineTo(PL,y);ctx.stroke();
+    });
+    ctx.save();ctx.translate(14,PT+cH/2);ctx.rotate(-Math.PI/2);
+    ctx.textAlign="center";ctx.fillStyle=C.muted;ctx.font=`9px 'Share Tech Mono',monospace`;
+    ctx.fillText("ALLOCATION %",0,0);ctx.restore();
+
+    // 軸線
+    ctx.strokeStyle=C.dim;ctx.lineWidth=1;ctx.globalAlpha=1;
+    ctx.beginPath();ctx.moveTo(PL,PT);ctx.lineTo(PL,PT+cH);ctx.lineTo(PL+cW,PT+cH);ctx.stroke();
+    // X=0 中線
+    const x0=PL+((0+100)/200)*cW;
+    ctx.strokeStyle=C.dim;ctx.lineWidth=0.8;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(x0,PT);ctx.lineTo(x0,PT+cH);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 神經連線（泡泡之間）
+    markets.forEach((a,i)=>markets.forEach((b,j)=>{
+      if(j<=i)return;
+      const ax=PL+((a.x+100)/200)*cW, ay=PT+cH*(1-a.y/100);
+      const bx=PL+((b.x+100)/200)*cW, by=PT+cH*(1-b.y/100);
+      const pulse=Math.sin(f*0.03+i)*0.5+0.5;
+      const lg=ctx.createLinearGradient(ax,ay,bx,by);
+      lg.addColorStop(0,a.color+Math.floor(pulse*80).toString(16).padStart(2,"0"));
+      lg.addColorStop(1,b.color+Math.floor(pulse*80).toString(16).padStart(2,"0"));
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);
+      ctx.strokeStyle=lg;ctx.lineWidth=0.8;ctx.stroke();
+      // 脈衝點
+      const t=((f*0.008+i*0.4)%1);
+      ctx.beginPath();ctx.arc(ax+(bx-ax)*t,ay+(by-ay)*t,2,0,Math.PI*2);
+      ctx.fillStyle=a.color+"aa";ctx.shadowColor=a.color;ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
+    }));
+
+    // 繪製泡泡
+    markets.forEach(m=>{
+      const x=PL+((m.x+100)/200)*cW;
+      const y=PT+cH*(1-m.y/100);
+      const r=10+(m.size/55)*22+Math.sin(f*0.03)*1.5;
+
+      const glow=ctx.createRadialGradient(x,y,0,x,y,r*1.5);
+      glow.addColorStop(0,m.color+"20");glow.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(x,y,r*1.5,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
+
+      const grad=ctx.createRadialGradient(x-r*0.3,y-r*0.3,0,x,y,r);
+      grad.addColorStop(0,m.color+"88");grad.addColorStop(1,m.color+"18");
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
+      ctx.strokeStyle=m.color;ctx.lineWidth=1;ctx.shadowColor=m.color;ctx.shadowBlur=6;ctx.stroke();ctx.shadowBlur=0;
+
+      ctx.fillStyle=m.color;ctx.textAlign="center";ctx.shadowColor=m.color;ctx.shadowBlur=8;
+      ctx.font=`bold 11px 'Share Tech Mono',monospace`;ctx.fillText(m.label,x,y-4);
+      ctx.font=`10px 'Share Tech Mono',monospace`;ctx.fillText(`${m.y}%`,x,y+8);
+      ctx.font=`9px 'Share Tech Mono',monospace`;ctx.fillStyle=m.x>=0?C.green:C.red;
+      ctx.fillText(`${m.x>=0?"+":""}${m.x}`,x,y+19);ctx.shadowBlur=0;
+    });
+  },[scores,alloc]);
+
+  const drawIndicator=useCallback((ctx,W,H)=>{
+    frameRef.current++;
+    const f=frameRef.current;
+    ctx.clearRect(0,0,W,H);ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
+
+    const PL=50,PR=20,PT=20,PB=40;
+    const cW=W-PL-PR,cH=H-PT-PB;
+    const groups=["FED","RATE","BOND","RISK","ASSET","STABLE"];
+    const nG=groups.length;
+
+    // 網格
+    ctx.strokeStyle=C.border;ctx.lineWidth=0.5;ctx.globalAlpha=0.3;
+    for(let i=0;i<=5;i++){
+      const x=PL+cW*i/5;
+      ctx.beginPath();ctx.moveTo(x,PT);ctx.lineTo(x,PT+cH);ctx.stroke();
+    }
+    for(let i=0;i<=4;i++){
+      const y=PT+cH*i/4;
+      ctx.beginPath();ctx.moveTo(PL,y);ctx.lineTo(PL+cW,y);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // X 軸（變化率）
+    ctx.fillStyle=C.muted;ctx.font=`10px 'Share Tech Mono',monospace`;ctx.textAlign="center";
+    const xVals=[-3,-2,-1,0,1,2,3];const xRange=6;
+    xVals.forEach(v=>{
+      const x=PL+((v+3)/xRange)*cW;
+      ctx.fillText(v+"%",x,H-8);
+    });
+    ctx.fillText("CHANGE % →",PL+cW/2,H-22);
+
+    // Y 軸（分組）
+    ctx.textAlign="right";
+    groups.forEach((g,i)=>{
+      const y=PT+cH*(i+0.5)/nG;
+      ctx.fillStyle=C.muted;ctx.font=`9px 'Share Tech Mono',monospace`;
+      ctx.fillText(g,PL-6,y+4);
+      ctx.strokeStyle=C.dim;ctx.lineWidth=0.3;ctx.globalAlpha=0.4;
+      ctx.beginPath();ctx.moveTo(PL,PT+cH*(i+1)/nG);ctx.lineTo(PL+cW,PT+cH*(i+1)/nG);ctx.stroke();
+      ctx.globalAlpha=1;
+    });
+
+    // 軸線
+    ctx.strokeStyle=C.dim;ctx.lineWidth=1;ctx.globalAlpha=1;
+    ctx.beginPath();ctx.moveTo(PL,PT);ctx.lineTo(PL,PT+cH);ctx.lineTo(PL+cW,PT+cH);ctx.stroke();
+    const x0=PL+(3/xRange)*cW;
+    ctx.setLineDash([4,4]);ctx.strokeStyle=C.dim;ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(x0,PT);ctx.lineTo(x0,PT+cH);ctx.stroke();ctx.setLineDash([]);
+
+    // 神經連線
+    indItems.forEach((a,i)=>indItems.forEach((b,j)=>{
+      if(j<=i)return;
+      const chgA=Math.max(-3,Math.min(3,a.chg)),chgB=Math.max(-3,Math.min(3,b.chg));
+      const ax=PL+((chgA+3)/xRange)*cW,ay=PT+cH*(a.group+0.5)/nG;
+      const bx=PL+((chgB+3)/xRange)*cW,by=PT+cH*(b.group+0.5)/nG;
+      const dist=Math.sqrt((ax-bx)**2+(ay-by)**2);if(dist>220)return;
+      const pulse=Math.sin(f*0.04+i*0.6)*0.5+0.5;
+      const alpha=(1-dist/220)*0.35*pulse;
+      const fillA=a.up?a.color:C.red,fillB=b.up?b.color:C.red;
+      const lg=ctx.createLinearGradient(ax,ay,bx,by);
+      lg.addColorStop(0,fillA+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+      lg.addColorStop(1,fillB+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.strokeStyle=lg;ctx.lineWidth=0.5;ctx.stroke();
+      const t=((f*0.01+i*0.2)%1);
+      ctx.beginPath();ctx.arc(ax+(bx-ax)*t,ay+(by-ay)*t,1.5,0,Math.PI*2);
+      ctx.fillStyle=fillA+"bb";ctx.shadowColor=fillA;ctx.shadowBlur=4;ctx.fill();ctx.shadowBlur=0;
+    }));
+
+    // 繪製泡泡
+    indItems.forEach(b=>{
+      const chgC=Math.max(-3,Math.min(3,b.chg));
+      const x=PL+((chgC+3)/xRange)*cW;
+      const y=PT+cH*(b.group+0.5)/nG;
+      const r=5+(Math.abs(b.chg)/maxChg)*14+Math.sin(f*0.05+b.group)*0.8;
+      const fillC=b.up?b.color:C.red;
+
+      const glow=ctx.createRadialGradient(x,y,0,x,y,r*1.4);
+      glow.addColorStop(0,fillC+"18");glow.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(x,y,r*1.4,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
+
+      const grad=ctx.createRadialGradient(x-r*0.25,y-r*0.25,0,x,y,r);
+      grad.addColorStop(0,fillC+"88");grad.addColorStop(1,fillC+"18");
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
+      ctx.strokeStyle=fillC;ctx.lineWidth=0.8;ctx.shadowColor=fillC;ctx.shadowBlur=3;ctx.stroke();ctx.shadowBlur=0;
+
+      ctx.fillStyle="#fff";ctx.textAlign="center";ctx.shadowColor=fillC;ctx.shadowBlur=5;
+      ctx.font=`bold 9px 'Share Tech Mono',monospace`;ctx.fillText(b.label,x,y-2);
+      ctx.font=`7px 'Share Tech Mono',monospace`;ctx.fillStyle=b.up?C.green:C.red;
+      ctx.fillText(`${b.up?"▲":"▼"}${Math.abs(b.chg).toFixed(1)}%`,x,y+8);ctx.shadowBlur=0;
+    });
+  },[DATA,scores]);
+
+  const scatterRef=useHiDpiCanvas(drawScatter,[drawScatter]);
+  const indRef=useHiDpiCanvas(drawIndicator,[drawIndicator]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:14,position:"relative"}}>
+        <GlitchBorder color={C.pink}/>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//MARKET_FLOW::SCATTER_VIZ | X=情緒分數 Y=資金佔比 SIZE=市值權重</div>
+        <canvas ref={scatterRef} style={{width:"100%",height:"260px",borderRadius:2,border:`1px solid ${C.border}`}}/>
+      </div>
+      <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:14,position:"relative"}}>
+        <GlitchBorder color={C.orange}/>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//INDICATOR_DELTA::SCATTER_VIZ | X=變化率% Y=指標分組 SIZE=波動幅度</div>
+        <canvas ref={indRef} style={{width:"100%",height:"300px",borderRadius:2,border:`1px solid ${C.border}`}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── 情緒歷史折線 ─────────────────────────────────────────
 function ScoreChart({history}){
   if(!history||history.length<2)return null;
-  const W=560,H=100;
+  const W=560,H=100,PL=42,PR=12,PT=8,PB=18;
   const cfg=[{k:"stock",c:C.green,l:"STOCK"},{k:"crypto",c:C.cyan,l:"CRYPTO"},{k:"gold",c:C.yellow,l:"GOLD"}];
-  const toPath=k=>history.map((d,i)=>{const x=(i/(history.length-1))*W,y=H/2-(d[k]/100)*(H/2-8);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+  const toPath=k=>history.map((d,i)=>{const x=PL+(i/(history.length-1))*(W-PL-PR),y=H/2-(d[k]/100)*((H-PT-PB)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
   return(
     <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,marginTop:10,position:"relative"}}>
       <GlitchBorder color={C.dim}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:8}}>//SENTIMENT_HISTORY::60D</div>
-      <div style={{display:"flex",gap:14,marginBottom:8}}>
-        {cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:14,height:2,background:c,boxShadow:`0 0 4px ${c}`}}/><span style={{fontSize:9,color:C.muted}}>{l}</span></div>))}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:3}}>//SENTIMENT_HISTORY::60D</div>
+        <div style={{display:"flex",gap:14}}>
+          {cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:14,height:2,background:c,boxShadow:`0 0 4px ${c}`}}/><span style={{fontSize:9,color:C.muted}}>{l}</span></div>))}
+        </div>
       </div>
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <line x1={0} y1={H/2} x2={W} y2={H/2} stroke={C.dim} strokeWidth={0.5} strokeDasharray="4 4"/>
-        {cfg.map(({k,c})=>{
-          const d=toPath(k);
-          const last=history[history.length-1];
-          const lx=W,ly=H/2-(last[k]/100)*(H/2-8);
-          return<g key={k}><path d={d} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;
-        })}
+        <line x1={PL} y1={PT} x2={PL} y2={H-PB} stroke={C.dim} strokeWidth={0.5}/>
+        {[50,0,-50].map(v=>{const y=H/2-(v/100)*((H-PT-PB)/2);return<g key={v}>
+          <line x1={PL-3} y1={y} x2={PL} y2={y} stroke={C.dim} strokeWidth={0.5}/>
+          <text x={PL-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text>
+          <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={C.dim} strokeWidth={0.3} strokeDasharray="4 6" opacity={0.5}/>
+        </g>;})}
+        {cfg.map(({k,c})=>{const last=history[history.length-1];const lx=PL+(W-PL-PR),ly=H/2-(last[k]/100)*((H-PT-PB)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.9} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1.5px ${c})`}}/><circle cx={lx} cy={ly} r={3} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/></g>;})}
       </svg>
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3,paddingLeft:PL}}>
         <span style={{fontSize:8,color:C.dim}}>{history[0]?.date}</span>
         <span style={{fontSize:8,color:C.dim}}>{history[history.length-1]?.date}</span>
       </div>
@@ -226,199 +479,16 @@ function ScoreChart({history}){
   );
 }
 
-function MarketBubbles({scores,DATA}){
-  const canvasRef=useRef(null);
-  const alloc=getAlloc(scores);
-  const markets=[{label:"STOCK",pct:alloc.stock,color:C.green,score:scores.stock},{label:"GOLD",pct:alloc.gold,color:C.yellow,score:scores.gold},{label:"CRYPTO",pct:alloc.crypto,color:C.cyan,score:scores.crypto}];
-  const maxPct=Math.max(...markets.map(m=>m.pct));
-  useEffect(()=>{
-    const canvas=canvasRef.current;if(!canvas)return;
-    const dpr=window.devicePixelRatio||1;
-    const displayW=canvas.offsetWidth||340;
-    const displayH=130;
-    canvas.width=displayW*dpr;canvas.height=displayH*dpr;
-    canvas.style.width=displayW+"px";canvas.style.height=displayH+"px";
-    const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
-    const W=displayW,H=displayH;
-    // 縮小3倍：最大半徑從40→13
-    const bubbles=markets.map((m,i)=>{
-      const baseR=7+(m.pct/maxPct)*6;
-      return{...m,baseR,r:baseR,x:W*(0.18+i*0.32),y:H*0.5,vx:(Math.random()-0.5)*0.25,vy:(Math.random()-0.5)*0.25,phase:Math.random()*Math.PI*2};
-    });
-    // 神經網絡節點（固定輔助節點）
-    const nodes=[
-      {x:W*0.5,y:H*0.2,r:4,color:C.dim},
-      {x:W*0.5,y:H*0.8,r:4,color:C.dim},
-      {x:W*0.08,y:H*0.5,r:3,color:C.dim},
-      {x:W*0.92,y:H*0.5,r:3,color:C.dim},
-    ];
-    let frame=0,raf;
-    const draw=()=>{
-      ctx.clearRect(0,0,W,H);ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
-      // 網格
-      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=0.5;
-      for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-      for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-      frame++;
-      // 更新位置
-      bubbles.forEach((b,i)=>{
-        b.r=b.baseR+Math.sin(frame*0.03+b.phase)*2;
-        b.x+=b.vx;b.y+=b.vy;
-        if(b.x<b.r+15||b.x>W-b.r-15)b.vx*=-1;
-        if(b.y<b.r+15||b.y>H-b.r-15)b.vy*=-1;
-        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+20;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.25;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
-        b.vx*=0.98;b.vy*=0.98;
-      });
-      // 神經網絡連線：泡泡之間
-      bubbles.forEach((b,i)=>{
-        bubbles.forEach((b2,j)=>{
-          if(j<=i)return;
-          const dx=b2.x-b.x,dy=b2.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
-          const pulse=Math.sin(frame*0.04+i*1.2)*0.5+0.5;
-          const alpha=Math.max(0,(1-dist/400)*0.6*pulse);
-          // 連線
-          const lg=ctx.createLinearGradient(b.x,b.y,b2.x,b2.y);
-          lg.addColorStop(0,b.color+Math.floor(alpha*255).toString(16).padStart(2,"0"));
-          lg.addColorStop(1,b2.color+Math.floor(alpha*255).toString(16).padStart(2,"0"));
-          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b2.x,b2.y);
-          ctx.strokeStyle=lg;ctx.lineWidth=0.6;ctx.stroke();
-          // 脈衝點沿連線移動
-          const t=(frame*0.01+i*0.33)%1;
-          const px=b.x+dx*t,py=b.y+dy*t;
-          ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);
-          ctx.fillStyle=b.color+"cc";ctx.shadowColor=b.color;ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
-        });
-        // 泡泡到輔助節點連線
-        nodes.forEach(n=>{
-          const dx=n.x-b.x,dy=n.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
-          if(dist>200)return;
-          const alpha=Math.max(0,(1-dist/200)*0.25);
-          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(n.x,n.y);
-          ctx.strokeStyle=b.color+Math.floor(alpha*255).toString(16).padStart(2,"0");
-          ctx.lineWidth=0.4;ctx.stroke();
-        });
-      });
-      // 輔助節點
-      nodes.forEach(n=>{
-        ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
-        ctx.fillStyle=C.dim;ctx.fill();
-      });
-      // 繪製泡泡
-      bubbles.forEach(b=>{
-        const glow=ctx.createRadialGradient(b.x,b.y,b.r*0.3,b.x,b.y,b.r*1.2);
-        glow.addColorStop(0,b.color+"12");glow.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.2,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
-        const grad=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,0,b.x,b.y,b.r);
-        grad.addColorStop(0,b.color+"55");grad.addColorStop(1,b.color+"0a");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
-        ctx.strokeStyle=b.color;ctx.lineWidth=0.8;ctx.shadowColor=b.color;ctx.shadowBlur=3;ctx.stroke();ctx.shadowBlur=0;
-        ctx.shadowColor=b.color;ctx.shadowBlur=5;ctx.fillStyle=b.color;ctx.textAlign="center";
-        ctx.font=`bold 9px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-5);
-        ctx.font=`bold 12px 'Share Tech Mono',monospace`;ctx.fillText(`${b.pct}%`,b.x,b.y+7);
-        ctx.font=`8px 'Share Tech Mono',monospace`;ctx.fillStyle=b.score>=0?C.green:C.red;
-        ctx.fillText(`${b.score>=0?"+":""}${b.score}`,b.x,b.y+18);ctx.shadowBlur=0;
-      });
-      raf=requestAnimationFrame(draw);
-    };draw();return()=>cancelAnimationFrame(raf);
-  },[]);
-  return(
-    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,marginBottom:10,position:"relative"}}>
-      <GlitchBorder color={C.pink}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//MARKET_FLOW::NEURAL_VIZ</div>
-      <canvas ref={canvasRef} width={340} height={130} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
-    </div>
-  );
-}
-
-function IndicatorBubbles({DATA}){
-  const canvasRef=useRef(null);
-  const items=[{key:"WALCL",label:"WALCL",color:C.green},{key:"M2SL",label:"M2",color:C.green},{key:"FEDFUNDS",label:"RATE",color:C.cyan},{key:"RRPONTSYD",label:"RRP",color:C.cyan},{key:"DGS2",label:"2Y",color:C.purple},{key:"DGS10",label:"10Y",color:C.purple},{key:"VIX",label:"VIX",color:C.red},{key:"DXY",label:"DXY",color:C.orange},{key:"GOLD",label:"GOLD",color:C.yellow},{key:"BTC_D",label:"BTC.D",color:C.orange},{key:"USDT_D",label:"USDT.D",color:C.green},{key:"USDC_D",label:"USDC.D",color:C.cyan}];
-  const withChange=items.map(item=>{const d=DATA[item.key];const chg=d?.prev?((d.value-d.prev)/Math.abs(d.prev))*100:0;return{...item,chg,up:chg>=0};});
-  const maxAbs=Math.max(...withChange.map(i=>Math.abs(i.chg)),0.01);
-  useEffect(()=>{
-    const canvas=canvasRef.current;if(!canvas)return;
-    const dpr=window.devicePixelRatio||1;
-    const displayW=canvas.offsetWidth||340;
-    const displayH=200;
-    canvas.width=displayW*dpr;canvas.height=displayH*dpr;
-    canvas.style.width=displayW+"px";canvas.style.height=displayH+"px";
-    const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
-    const W=displayW,H=displayH;
-    // 縮小3倍：最大半徑從26→9
-    const bubbles=withChange.map((item,i)=>{
-      const baseR=4+(Math.abs(item.chg)/maxAbs)*5;
-      const col=4,colW=W/col,rowH=H/3;
-      return{...item,baseR,r:baseR,x:(i%col)*colW+colW/2,y:Math.floor(i/col)*rowH+rowH/2,vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,phase:Math.random()*Math.PI*2};
-    });
-    let frame=0,raf;
-    const draw=()=>{
-      ctx.clearRect(0,0,W,H);ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
-      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=0.5;
-      for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-      for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-      frame++;
-      bubbles.forEach((b,i)=>{
-        b.r=b.baseR+Math.sin(frame*0.04+b.phase)*1.5;b.x+=b.vx;b.y+=b.vy;
-        if(b.x<b.r+8||b.x>W-b.r-8)b.vx*=-1;if(b.y<b.r+8||b.y>H-b.r-8)b.vy*=-1;
-        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+12;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.35;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
-        b.vx*=0.97;b.vy*=0.97;
-      });
-      // 神經網絡連線
-      bubbles.forEach((b,i)=>{
-        bubbles.forEach((b2,j)=>{
-          if(j<=i)return;
-          const dx=b2.x-b.x,dy=b2.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
-          if(dist>180)return;
-          const pulse=Math.sin(frame*0.05+i*0.8)*0.5+0.5;
-          const alpha=(1-dist/180)*0.45*pulse;
-          const lg=ctx.createLinearGradient(b.x,b.y,b2.x,b2.y);
-          const fillC=b.up?b.color:C.red;const fillC2=b2.up?b2.color:C.red;
-          lg.addColorStop(0,fillC+Math.floor(alpha*255).toString(16).padStart(2,"0"));
-          lg.addColorStop(1,fillC2+Math.floor(alpha*255).toString(16).padStart(2,"0"));
-          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b2.x,b2.y);
-          ctx.strokeStyle=lg;ctx.lineWidth=0.5;ctx.stroke();
-          // 脈衝點
-          const t=((frame*0.012+i*0.25)%1);
-          const px=b.x+dx*t,py=b.y+dy*t;
-          ctx.beginPath();ctx.arc(px,py,1.5,0,Math.PI*2);
-          ctx.fillStyle=fillC+"bb";ctx.shadowColor=fillC;ctx.shadowBlur=4;ctx.fill();ctx.shadowBlur=0;
-        });
-      });
-      // 繪製泡泡
-      bubbles.forEach(b=>{
-        const fillC=b.up?b.color:C.red;
-        const glow=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*1.15);
-        glow.addColorStop(0,fillC+"10");glow.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.15,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
-        const grad=ctx.createRadialGradient(b.x-b.r*0.25,b.y-b.r*0.25,0,b.x,b.y,b.r);
-        grad.addColorStop(0,fillC+"66");grad.addColorStop(1,fillC+"15");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
-        ctx.strokeStyle=fillC;ctx.lineWidth=0.6;ctx.shadowColor=fillC;ctx.shadowBlur=2;ctx.stroke();ctx.shadowBlur=0;
-        ctx.fillStyle="#fff";ctx.textAlign="center";
-        ctx.font=`bold 7px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-2);
-        ctx.font=`6px 'Share Tech Mono',monospace`;ctx.fillStyle=b.up?C.green:C.red;
-        ctx.fillText(`${b.up?"▲":"▼"}${Math.abs(b.chg).toFixed(1)}%`,b.x,b.y+7);
-      });
-      raf=requestAnimationFrame(draw);
-    };draw();return()=>cancelAnimationFrame(raf);
-  },[]);
-  return(
-    <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,position:"relative"}}>
-      <GlitchBorder color={C.orange}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//INDICATOR_DELTA::NEURAL_VIZ</div>
-      <canvas ref={canvasRef} width={340} height={200} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
-    </div>
-  );
-}
-
-function App(){
+// ── 主 App ────────────────────────────────────────────────
+export default function App(){
   const [authed,setAuthed]=useState(false);
   const [tab,setTab]=useState("dashboard");
   const [DATA,setDATA]=useState(FALLBACK);
   const [loading,setLoading]=useState(true);
   const [lastFetch,setLastFetch]=useState(null);
-  const [collapsed,setCollapsed]=useState({});
-  const toggle=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
+  // collapsed: false=半高, true=全高
+  const [expanded,setExpanded]=useState({});
+  const toggleExp=k=>setExpanded(p=>({...p,[k]:!p[k]}));
 
   useEffect(()=>{
     if(!authed)return;
@@ -437,11 +507,25 @@ function App(){
   const printing=DATA.WALCL.value>DATA.WALCL.prev||DATA.M2SL.value>DATA.M2SL.prev;
   const ff=DATA.FEDFUNDS;
   const rate=ff.value<ff.prev?"降息":ff.value>ff.prev?"升息":"持平";
-  const CARDS=[{k:"WALCL",c:C.green},{k:"M2SL",c:C.green},{k:"FEDFUNDS",c:C.cyan},{k:"RRPONTSYD",c:C.cyan},{k:"DGS2",c:C.purple},{k:"DGS10",c:C.purple},{k:"VIX",c:C.red},{k:"DXY",c:C.orange},{k:"GOLD",c:C.yellow},{k:"BTC_D",c:C.orange},{k:"USDT_D",c:C.green},{k:"USDC_D",c:C.cyan}];
-  const H_FULL=120,PAD_L=52,PAD_R=12,PAD_T=8,PAD_B=20,W=560;
+
+  const CARDS=[
+    {k:"WALCL",c:C.green},{k:"M2SL",c:C.green},
+    {k:"FEDFUNDS",c:C.cyan},{k:"RRPONTSYD",c:C.cyan},
+    {k:"DGS2",c:C.purple},{k:"DGS10",c:C.purple},
+    {k:"VIX",c:C.red},{k:"DXY",c:C.orange},
+    {k:"GOLD",c:C.yellow},{k:"BTC_D",c:C.orange},
+    {k:"USDT_D",c:C.green},{k:"USDC_D",c:C.cyan},
+  ];
+
+  // 歷史曲線參數
+  const H_HALF=70,H_FULL=140,PL=52,PR=12,PT=8,PB=22,W=560;
   const makePath=(obs,h)=>{
     const vals=obs.map(o=>o.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
-    return{pts:obs.map((o,i,a)=>{const x=PAD_L+(i/(a.length-1))*(W-PAD_L-PAD_R),y=PAD_T+(1-(o.value-mn)/rng)*(h-PAD_T-PAD_B);return`${x},${y}`;}).join(" "),mn,mx,lastY:PAD_T+(1-(obs[obs.length-1].value-mn)/rng)*(h-PAD_T-PAD_B)};
+    return{
+      pts:obs.map((o,i,a)=>{const x=PL+(i/(a.length-1))*(W-PL-PR),y=PT+(1-(o.value-mn)/rng)*(h-PT-PB);return`${x},${y}`;}).join(" "),
+      mn,mx,
+      lastY:PT+(1-(obs[obs.length-1].value-mn)/rng)*(h-PT-PB),
+    };
   };
 
   return(
@@ -449,6 +533,8 @@ function App(){
       <div style={{position:"fixed",top:0,left:0,right:0,height:"2px",overflow:"hidden",zIndex:9999,pointerEvents:"none"}}>
         <div style={{position:"absolute",top:0,height:"100%",width:"40%",background:`linear-gradient(90deg,transparent,${C.cyan},transparent)`,animation:"scan 3s linear infinite"}}/>
       </div>
+
+      {/* Header */}
       <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div>
           <div style={{fontSize:8,letterSpacing:4,color:C.pink}}>//SYS::MACRO_TERMINAL</div>
@@ -461,6 +547,8 @@ function App(){
           </>}
         </div>
       </div>
+
+      {/* Tabs */}
       <div style={{padding:"8px 16px 0",display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,overflowX:"auto",position:"sticky",top:"46px",zIndex:99,background:C.bg2}}>
         {[["dashboard","[OVERVIEW]"],["bubbles","[BUBBLE_VIZ]"],["indicators","[INDICATORS]"],["history","[HISTORY]"]].map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)} style={{padding:"6px 12px",fontSize:10,border:"none",borderBottom:tab===k?`2px solid ${C.cyan}`:"2px solid transparent",background:"transparent",color:tab===k?C.cyan:C.muted,letterSpacing:1,whiteSpace:"nowrap"}}>
@@ -468,21 +556,24 @@ function App(){
           </button>
         ))}
       </div>
+
       <div style={{padding:"12px 14px"}}>
+
+        {/* ── OVERVIEW ── */}
         {tab==="dashboard"&&<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
-            <div style={{background:C.panel,border:`1px solid ${printing?C.green:C.red}`,borderRadius:4,padding:"10px",boxShadow:printing?`0 0 12px ${C.green}33`:`0 0 12px ${C.red}33`}}>
-              <div style={{fontSize:8,color:C.muted,marginBottom:3}}>FED::BALANCE</div>
-              <div style={{fontSize:11,fontWeight:700,color:printing?C.green:C.red}}>{printing?"▲ EXPANDING":"▼ SHRINKING"}</div>
+            <div style={{background:C.panel,border:`1px solid ${printing?C.green:C.red}`,borderRadius:4,padding:"12px",boxShadow:printing?`0 0 12px ${C.green}33`:`0 0 12px ${C.red}33`}}>
+              <div style={{fontSize:8,color:C.muted,marginBottom:4}}>FED::BALANCE</div>
+              <div style={{fontSize:13,fontWeight:700,color:printing?C.green:C.red}}>{printing?"▲ EXPANDING":"▼ SHRINKING"}</div>
             </div>
-            <div style={{background:C.panel,border:`1px solid ${rate==="降息"?C.green:rate==="升息"?C.red:C.yellow}`,borderRadius:4,padding:"10px"}}>
-              <div style={{fontSize:8,color:C.muted,marginBottom:3}}>FED::RATE</div>
-              <div style={{fontSize:11,fontWeight:700,color:rate==="降息"?C.green:rate==="升息"?C.red:C.yellow}}>{rate==="降息"?"▼ CUT":rate==="升息"?"▲ HIKE":"— HOLD"}</div>
+            <div style={{background:C.panel,border:`1px solid ${rate==="降息"?C.green:rate==="升息"?C.red:C.yellow}`,borderRadius:4,padding:"12px"}}>
+              <div style={{fontSize:8,color:C.muted,marginBottom:4}}>FED::RATE</div>
+              <div style={{fontSize:13,fontWeight:700,color:rate==="降息"?C.green:rate==="升息"?C.red:C.yellow}}>{rate==="降息"?"▼ CUT":rate==="升息"?"▲ HIKE":"— HOLD"}</div>
             </div>
-            <div style={{background:C.panel,border:`1px solid ${C.cyan}`,borderRadius:4,padding:"10px",boxShadow:`0 0 10px ${C.cyan}22`}}>
-              <div style={{fontSize:8,color:C.muted,marginBottom:3}}>FEDFUNDS</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.cyan,textShadow:`0 0 10px ${C.cyan}`}}>{ff.value.toFixed(2)}%</div>
-              <div style={{fontSize:8,color:C.muted}}>PREV:{ff.prev.toFixed(2)}%</div>
+            <div style={{background:C.panel,border:`1px solid ${C.cyan}`,borderRadius:4,padding:"12px",boxShadow:`0 0 10px ${C.cyan}22`}}>
+              <div style={{fontSize:8,color:C.muted,marginBottom:4}}>FEDFUNDS</div>
+              <div style={{fontSize:18,fontWeight:700,color:C.cyan,fontFamily:"'Share Tech Mono',monospace",textShadow:`0 0 10px ${C.cyan}`}}>{ff.value.toFixed(2)}%</div>
+              <div style={{fontSize:9,color:C.muted}}>PREV:{ff.prev.toFixed(2)}%</div>
             </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
@@ -496,20 +587,22 @@ function App(){
             //DATA_AUTO_UPDATE::DAILY_08:00_TST | MANUAL: CONTACT_CLAUDE
           </div>
         </>}
-        {tab==="bubbles"&&<>
-          <MarketBubbles scores={scores} DATA={DATA}/>
-          <IndicatorBubbles DATA={DATA}/>
-        </>}
+
+        {/* ── BUBBLE_VIZ ── */}
+        {tab==="bubbles"&&<ScatterBubbles DATA={DATA} scores={scores}/>}
+
+        {/* ── INDICATORS ── */}
         {tab==="indicators"&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-            {CARDS.map(({k,c})=>{const d=DATA[k];if(!d)return null;
+            {CARDS.map(({k,c})=>{
+              const d=DATA[k];if(!d)return null;
               const chg=d.value-d.prev,pct=d.prev?(chg/Math.abs(d.prev))*100:0;
               const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
               const hist=HIST[k]||[];
               const vals=hist.map(h=>h.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
-              const W=280,H=90;
-              const pts=hist.map((h,i,a)=>{const x=(i/(a.length-1))*W,y=H-((h.value-mn)/rng)*(H-8)-4;return`${x},${y}`;}).join(" ");
-              const lastX=W,lastY=H-((hist[hist.length-1]?.value-mn)/rng)*(H-8)-4;
+              const cW=280,cH=90;
+              const pts=hist.map((h,i,a)=>{const x=(i/(a.length-1))*cW,y=cH-((h.value-mn)/rng)*(cH-8)-4;return`${x},${y}`;}).join(" ");
+              const lastY=hist.length?cH-((hist[hist.length-1].value-mn)/rng)*(cH-8)-4:cH/2;
               return(
                 <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:16,position:"relative"}}>
                   <GlitchBorder color={c}/>
@@ -517,17 +610,17 @@ function App(){
                     <div>
                       <div style={{fontSize:10,color:C.muted,letterSpacing:1,marginBottom:4}}>{d.name}</div>
                       <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-                        <span style={{fontSize:24,fontWeight:700,color:c,textShadow:`0 0 10px ${c}66`}}>{d.value.toFixed(dec)}</span>
+                        <span style={{fontSize:26,fontWeight:700,color:c,textShadow:`0 0 10px ${c}55`,fontFamily:"'Share Tech Mono',monospace"}}>{d.value.toFixed(dec)}</span>
                         <span style={{fontSize:11,color:C.muted}}>{d.unit}</span>
                       </div>
                     </div>
-                    <span style={{fontSize:13,color:chg>0?C.green:C.red,fontWeight:700}}>{chg>0?"▲":"▼"}{Math.abs(pct).toFixed(2)}%</span>
+                    <span style={{fontSize:14,color:chg>0?C.green:C.red,fontWeight:700}}>{chg>0?"▲":"▼"}{Math.abs(pct).toFixed(2)}%</span>
                   </div>
-                  <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-                    <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
-                    <circle cx={lastX} cy={lastY} r={3} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
+                  <svg width="100%" height={cH} viewBox={`0 0 ${cW} ${cH}`} preserveAspectRatio="none">
+                    <polyline points={pts} fill="none" stroke={c} strokeWidth={1} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 2px ${c})`}}/>
+                    <circle cx={cW} cy={lastY} r={3.5} fill={c} style={{filter:`drop-shadow(0 0 6px ${c})`}}/>
                   </svg>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:5}}>
                     <span style={{fontSize:8,color:C.dim}}>{hist[0]?.date}</span>
                     <span style={{fontSize:8,color:C.dim}}>{hist[hist.length-1]?.date}</span>
                   </div>
@@ -536,81 +629,99 @@ function App(){
             })}
           </div>
         )}
+
+        {/* ── HISTORY ── */}
         {tab==="history"&&(
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {/* 情緒歷史 */}
             {(()=>{
-              const isCol=collapsed["__score"];
+              const isExp=expanded["__score"];
+              const H=isExp?H_FULL:H_HALF;
               const cfg=[{k:"stock",c:C.green,l:"STOCK"},{k:"crypto",c:C.cyan,l:"CRYPTO"},{k:"gold",c:C.yellow,l:"GOLD"}];
-              const toPath=k=>SCORE_HIST.map((d,i)=>{const x=PAD_L+(i/(SCORE_HIST.length-1))*(W-PAD_L-PAD_R),y=H_FULL/2-(d[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+              const toPath=k=>SCORE_HIST.map((d,i)=>{const x=PL+(i/(SCORE_HIST.length-1))*(W-PL-PR),y=H/2-(d[k]/100)*((H-PT-PB)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+              const yTicks=[50,0,-50];
               return(
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:12,position:"relative"}}>
                   <GlitchBorder color={C.dim}/>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <div style={{fontSize:9,color:C.muted,letterSpacing:3}}>//SENTIMENT_60D</div>
                     <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                      {!isCol&&cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:12,height:1.5,background:c}}/><span style={{fontSize:8,color:C.muted}}>{l}</span></div>))}
-                      <button onClick={()=>toggle("__score")} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[EXPAND]":"[FOLD]"}</button>
+                      {cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:12,height:1.5,background:c}}/><span style={{fontSize:8,color:C.muted}}>{l}</span></div>))}
+                      <button onClick={()=>toggleExp("__score")} style={{background:"transparent",border:`1px solid ${C.cyan}`,color:C.cyan,fontSize:8,padding:"2px 10px",borderRadius:2,cursor:"pointer",letterSpacing:1,marginLeft:8}}>
+                        {isExp?"[▲ 收起]":"[▼ 展開]"}
+                      </button>
                     </div>
                   </div>
-                  {!isCol&&<>
-                    <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
-                      <line x1={PAD_L} y1={H_FULL/2} x2={W-PAD_R} y2={H_FULL/2} stroke={C.dim} strokeWidth={0.5} strokeDasharray="4 4"/>
-                      {[50,-50].map(v=>{const y=H_FULL/2-(v/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={v}><line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.3} strokeDasharray="2 6"/><text x={PAD_L-4} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text></g>;})}
-                      <text x={PAD_L-4} y={H_FULL/2+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">0</text>
-                      {cfg.map(({k,c})=>{const last=SCORE_HIST[SCORE_HIST.length-1];const lx=PAD_L+(W-PAD_L-PAD_R),ly=H_FULL/2-(last[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;})}
+                  <div style={{overflow:"hidden",transition:"height 0.3s ease",height:H}}>
+                    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                      <line x1={PL} y1={PT} x2={PL} y2={H-PB} stroke={C.dim} strokeWidth={0.5}/>
+                      {yTicks.map(v=>{const y=H/2-(v/100)*((H-PT-PB)/2);return<g key={v}>
+                        <line x1={PL-3} y1={y} x2={PL} y2={y} stroke={C.dim} strokeWidth={0.5}/>
+                        <text x={PL-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text>
+                        <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="4 8" opacity={0.5}/>
+                      </g>;})}
+                      {cfg.map(({k,c})=>{const last=SCORE_HIST[SCORE_HIST.length-1];const lx=PL+(W-PL-PR),ly=H/2-(last[k]/100)*((H-PT-PB)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.9} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1.5px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;})}
                     </svg>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                      <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[0]?.date}</span>
-                      <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[SCORE_HIST.length-1]?.date}</span>
-                    </div>
-                  </>}
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:3,paddingLeft:PL}}>
+                    <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[0]?.date}</span>
+                    <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[SCORE_HIST.length-1]?.date}</span>
+                  </div>
                 </div>
               );
             })()}
+
             {/* 各指標曲線 */}
             {CARDS.map(({k,c})=>{
               const obs=HIST[k],d=DATA[k];if(!obs||!d)return null;
               const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
-              const isCol=collapsed[k];
-              const {pts,mn,mx,lastY}=makePath(obs,H_FULL);
-              const steps=4;
-              const yTicks=Array.from({length:steps+1},(_,i)=>{const v=mn+(mx-mn)*i/steps;const y=PAD_T+(1-(v-mn)/(mx-mn||1))*(H_FULL-PAD_T-PAD_B);return{v,y};});
+              const isExp=expanded[k];
+              const H=isExp?H_FULL:H_HALF;
+              const {pts,mn,mx,lastY}=makePath(obs,H);
+              const steps=isExp?5:3;
+              const yTicks=Array.from({length:steps+1},(_,i)=>{
+                const v=mn+(mx-mn)*i/steps;
+                const y=PT+(1-(v-mn)/(mx-mn||1))*(H-PT-PB);
+                return{v,y};
+              });
               return(
                 <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"10px 12px",position:"relative"}}>
                   <GlitchBorder color={c}/>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{fontSize:10,color:C.muted}}>{d.name}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:c,textShadow:`0 0 5px ${c}`}}>{d.value.toFixed(dec)} {d.unit}</span>
+                      <span style={{fontSize:14,fontWeight:700,color:c,textShadow:`0 0 5px ${c}`,fontFamily:"'Share Tech Mono',monospace"}}>{d.value.toFixed(dec)} {d.unit}</span>
                     </div>
-                    <button onClick={()=>toggle(k)} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[▼]":"[▲]"}</button>
+                    <button onClick={()=>toggleExp(k)} style={{background:"transparent",border:`1px solid ${c}`,color:c,fontSize:8,padding:"2px 10px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>
+                      {isExp?"[▲ 收起]":"[▼ 展開]"}
+                    </button>
                   </div>
-                  {!isCol&&<>
-                    <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
-                      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H_FULL-PAD_B} stroke={C.dim} strokeWidth={0.5}/>
+                  <div style={{overflow:"hidden",transition:"height 0.3s ease",height:H}}>
+                    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                      <line x1={PL} y1={PT} x2={PL} y2={H-PB} stroke={C.dim} strokeWidth={0.5}/>
                       {yTicks.map(({v,y},i)=>(
                         <g key={i}>
-                          <line x1={PAD_L-3} y1={y} x2={PAD_L} y2={y} stroke={C.dim} strokeWidth={0.5}/>
-                          <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="3 8"/>
-                          <text x={PAD_L-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={6.5} fontFamily="Share Tech Mono,monospace">
-                            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(dec>0?1:0)}
+                          <line x1={PL-3} y1={y} x2={PL} y2={y} stroke={C.dim} strokeWidth={0.5}/>
+                          <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="3 8" opacity={0.4}/>
+                          <text x={PL-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={6.5} fontFamily="Share Tech Mono,monospace">
+                            {v>=10000?`${(v/1000).toFixed(0)}k`:v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(dec>0?1:0)}
                           </text>
                         </g>
                       ))}
-                      <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
-                      <circle cx={W-PAD_R} cy={lastY} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
+                      <polyline points={pts} fill="none" stroke={c} strokeWidth={0.9} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1.5px ${c})`}}/>
+                      <circle cx={W-PR} cy={lastY} r={3} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
                     </svg>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:2,paddingLeft:PAD_L}}>
-                      <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
-                      <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
-                    </div>
-                  </>}
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:3,paddingLeft:PL}}>
+                    <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
+                    <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
+
       </div>
     </div>
   );
