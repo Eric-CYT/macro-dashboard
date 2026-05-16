@@ -235,31 +235,83 @@ function MarketBubbles({scores,DATA}){
     const canvas=canvasRef.current;if(!canvas)return;
     const ctx=canvas.getContext("2d");
     const W=canvas.width,H=canvas.height;
-    const bubbles=markets.map((m,i)=>{const baseR=28+(m.pct/maxPct)*34;return{...m,baseR,r:baseR,x:W*(0.2+i*0.3),y:H*0.5,vx:(Math.random()-0.5)*0.4,vy:(Math.random()-0.5)*0.4,phase:Math.random()*Math.PI*2};});
+    // 較小泡泡
+    const bubbles=markets.map((m,i)=>{
+      const baseR=18+(m.pct/maxPct)*22;
+      return{...m,baseR,r:baseR,x:W*(0.18+i*0.32),y:H*0.5,vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,phase:Math.random()*Math.PI*2};
+    });
+    // 神經網絡節點（固定輔助節點）
+    const nodes=[
+      {x:W*0.5,y:H*0.2,r:4,color:C.dim},
+      {x:W*0.5,y:H*0.8,r:4,color:C.dim},
+      {x:W*0.08,y:H*0.5,r:3,color:C.dim},
+      {x:W*0.92,y:H*0.5,r:3,color:C.dim},
+    ];
     let frame=0,raf;
     const draw=()=>{
       ctx.clearRect(0,0,W,H);ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
-      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=1;
+      // 網格
+      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=0.5;
       for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
       for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
       frame++;
+      // 更新位置
       bubbles.forEach((b,i)=>{
-        b.r=b.baseR+Math.sin(frame*0.03+b.phase)*4;
+        b.r=b.baseR+Math.sin(frame*0.03+b.phase)*2;
         b.x+=b.vx;b.y+=b.vy;
-        if(b.x<b.r+20||b.x>W-b.r-20)b.vx*=-1;if(b.y<b.r+20||b.y>H-b.r-20)b.vy*=-1;
-        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+10;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.3;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
+        if(b.x<b.r+15||b.x>W-b.r-15)b.vx*=-1;
+        if(b.y<b.r+15||b.y>H-b.r-15)b.vy*=-1;
+        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+20;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.25;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
         b.vx*=0.98;b.vy*=0.98;
-        const glow=ctx.createRadialGradient(b.x,b.y,b.r*0.5,b.x,b.y,b.r*1.3);glow.addColorStop(0,b.color+"18");glow.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.3,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
-        const grad=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,0,b.x,b.y,b.r);grad.addColorStop(0,b.color+"66");grad.addColorStop(0.6,b.color+"33");grad.addColorStop(1,b.color+"08");
+      });
+      // 神經網絡連線：泡泡之間
+      bubbles.forEach((b,i)=>{
+        bubbles.forEach((b2,j)=>{
+          if(j<=i)return;
+          const dx=b2.x-b.x,dy=b2.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
+          const pulse=Math.sin(frame*0.04+i*1.2)*0.5+0.5;
+          const alpha=Math.max(0,(1-dist/400)*0.6*pulse);
+          // 連線
+          const lg=ctx.createLinearGradient(b.x,b.y,b2.x,b2.y);
+          lg.addColorStop(0,b.color+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+          lg.addColorStop(1,b2.color+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b2.x,b2.y);
+          ctx.strokeStyle=lg;ctx.lineWidth=0.6;ctx.stroke();
+          // 脈衝點沿連線移動
+          const t=(frame*0.01+i*0.33)%1;
+          const px=b.x+dx*t,py=b.y+dy*t;
+          ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);
+          ctx.fillStyle=b.color+"cc";ctx.shadowColor=b.color;ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
+        });
+        // 泡泡到輔助節點連線
+        nodes.forEach(n=>{
+          const dx=n.x-b.x,dy=n.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist>200)return;
+          const alpha=Math.max(0,(1-dist/200)*0.25);
+          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(n.x,n.y);
+          ctx.strokeStyle=b.color+Math.floor(alpha*255).toString(16).padStart(2,"0");
+          ctx.lineWidth=0.4;ctx.stroke();
+        });
+      });
+      // 輔助節點
+      nodes.forEach(n=>{
+        ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+        ctx.fillStyle=C.dim;ctx.fill();
+      });
+      // 繪製泡泡
+      bubbles.forEach(b=>{
+        const glow=ctx.createRadialGradient(b.x,b.y,b.r*0.3,b.x,b.y,b.r*1.2);
+        glow.addColorStop(0,b.color+"12");glow.addColorStop(1,"transparent");
+        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.2,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
+        const grad=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,0,b.x,b.y,b.r);
+        grad.addColorStop(0,b.color+"55");grad.addColorStop(1,b.color+"0a");
         ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
-        ctx.strokeStyle=b.color;ctx.lineWidth=1;ctx.shadowColor=b.color;ctx.shadowBlur=4;ctx.stroke();ctx.shadowBlur=0;
-        ctx.shadowColor=b.color;ctx.shadowBlur=6;ctx.fillStyle=b.color;ctx.textAlign="center";
-        ctx.font=`bold 11px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-8);
-        ctx.font=`bold 16px 'Share Tech Mono',monospace`;ctx.fillText(`${b.pct}%`,b.x,b.y+6);
-        ctx.font=`10px 'Share Tech Mono',monospace`;ctx.fillStyle=b.score>=0?C.green:C.red;ctx.fillText(`${b.score>=0?"+":""}${b.score}`,b.x,b.y+20);
-        // 終端圓點
-        ctx.beginPath();ctx.arc(b.x,b.y-b.r,3,0,Math.PI*2);ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
+        ctx.strokeStyle=b.color;ctx.lineWidth=0.8;ctx.shadowColor=b.color;ctx.shadowBlur=3;ctx.stroke();ctx.shadowBlur=0;
+        ctx.shadowColor=b.color;ctx.shadowBlur=5;ctx.fillStyle=b.color;ctx.textAlign="center";
+        ctx.font=`bold 9px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-5);
+        ctx.font=`bold 12px 'Share Tech Mono',monospace`;ctx.fillText(`${b.pct}%`,b.x,b.y+7);
+        ctx.font=`8px 'Share Tech Mono',monospace`;ctx.fillStyle=b.score>=0?C.green:C.red;
+        ctx.fillText(`${b.score>=0?"+":""}${b.score}`,b.x,b.y+18);ctx.shadowBlur=0;
       });
       raf=requestAnimationFrame(draw);
     };draw();return()=>cancelAnimationFrame(raf);
@@ -267,8 +319,8 @@ function MarketBubbles({scores,DATA}){
   return(
     <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,marginBottom:10,position:"relative"}}>
       <GlitchBorder color={C.pink}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//MARKET_FLOW::REALTIME_VIZ</div>
-      <canvas ref={canvasRef} width={340} height={160} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//MARKET_FLOW::NEURAL_VIZ</div>
+      <canvas ref={canvasRef} width={340} height={130} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
     </div>
   );
 }
@@ -281,28 +333,60 @@ function IndicatorBubbles({DATA}){
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
     const ctx=canvas.getContext("2d");const W=canvas.width,H=canvas.height;
-    const bubbles=withChange.map((item,i)=>{const baseR=16+(Math.abs(item.chg)/maxAbs)*26;const col=4,colW=W/col,rowH=H/3;return{...item,baseR,r:baseR,x:(i%col)*colW+colW/2,y:Math.floor(i/col)*rowH+rowH/2,vx:(Math.random()-0.5)*0.5,vy:(Math.random()-0.5)*0.5,phase:Math.random()*Math.PI*2};});
+    // 較小半徑
+    const bubbles=withChange.map((item,i)=>{
+      const baseR=10+(Math.abs(item.chg)/maxAbs)*16;
+      const col=4,colW=W/col,rowH=H/3;
+      return{...item,baseR,r:baseR,x:(i%col)*colW+colW/2,y:Math.floor(i/col)*rowH+rowH/2,vx:(Math.random()-0.5)*0.4,vy:(Math.random()-0.5)*0.4,phase:Math.random()*Math.PI*2};
+    });
     let frame=0,raf;
     const draw=()=>{
       ctx.clearRect(0,0,W,H);ctx.fillStyle=C.bg2;ctx.fillRect(0,0,W,H);
-      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=1;for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      ctx.strokeStyle="#0a0a1e";ctx.lineWidth=0.5;
+      for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
       frame++;
       bubbles.forEach((b,i)=>{
-        b.r=b.baseR+Math.sin(frame*0.04+b.phase)*2;b.x+=b.vx;b.y+=b.vy;
+        b.r=b.baseR+Math.sin(frame*0.04+b.phase)*1.5;b.x+=b.vx;b.y+=b.vy;
         if(b.x<b.r+8||b.x>W-b.r-8)b.vx*=-1;if(b.y<b.r+8||b.y>H-b.r-8)b.vy*=-1;
-        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+6;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.4;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
+        bubbles.forEach((b2,j)=>{if(i===j)return;const dx=b.x-b2.x,dy=b.y-b2.y,dist=Math.sqrt(dx*dx+dy*dy),minD=b.r+b2.r+12;if(dist<minD&&dist>0){const f=(minD-dist)/minD*0.35;b.vx+=dx/dist*f;b.vy+=dy/dist*f;}});
         b.vx*=0.97;b.vy*=0.97;
-        const fillC=b.up?b.color:C.red;const alpha=0.15+Math.abs(b.chg)/maxAbs*0.5;
-        const glow=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*1.2);glow.addColorStop(0,fillC+"15");glow.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.2,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
-        const grad=ctx.createRadialGradient(b.x-b.r*0.25,b.y-b.r*0.25,0,b.x,b.y,b.r);grad.addColorStop(0,fillC+"77");grad.addColorStop(1,fillC+"18");
+      });
+      // 神經網絡連線
+      bubbles.forEach((b,i)=>{
+        bubbles.forEach((b2,j)=>{
+          if(j<=i)return;
+          const dx=b2.x-b.x,dy=b2.y-b.y,dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist>180)return;
+          const pulse=Math.sin(frame*0.05+i*0.8)*0.5+0.5;
+          const alpha=(1-dist/180)*0.45*pulse;
+          const lg=ctx.createLinearGradient(b.x,b.y,b2.x,b2.y);
+          const fillC=b.up?b.color:C.red;const fillC2=b2.up?b2.color:C.red;
+          lg.addColorStop(0,fillC+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+          lg.addColorStop(1,fillC2+Math.floor(alpha*255).toString(16).padStart(2,"0"));
+          ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b2.x,b2.y);
+          ctx.strokeStyle=lg;ctx.lineWidth=0.5;ctx.stroke();
+          // 脈衝點
+          const t=((frame*0.012+i*0.25)%1);
+          const px=b.x+dx*t,py=b.y+dy*t;
+          ctx.beginPath();ctx.arc(px,py,1.5,0,Math.PI*2);
+          ctx.fillStyle=fillC+"bb";ctx.shadowColor=fillC;ctx.shadowBlur=4;ctx.fill();ctx.shadowBlur=0;
+        });
+      });
+      // 繪製泡泡
+      bubbles.forEach(b=>{
+        const fillC=b.up?b.color:C.red;
+        const glow=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*1.15);
+        glow.addColorStop(0,fillC+"10");glow.addColorStop(1,"transparent");
+        ctx.beginPath();ctx.arc(b.x,b.y,b.r*1.15,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
+        const grad=ctx.createRadialGradient(b.x-b.r*0.25,b.y-b.r*0.25,0,b.x,b.y,b.r);
+        grad.addColorStop(0,fillC+"66");grad.addColorStop(1,fillC+"15");
         ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
-        ctx.strokeStyle=fillC;ctx.lineWidth=0.8;ctx.shadowColor=fillC;ctx.shadowBlur=3;ctx.stroke();ctx.shadowBlur=0;
-        ctx.fillStyle=fillC;ctx.textAlign="center";ctx.shadowColor=fillC;ctx.shadowBlur=4;
-        ctx.font=`bold 9px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-3);
-        ctx.font=`8px 'Share Tech Mono',monospace`;ctx.fillStyle=b.up?C.green:C.red;ctx.fillText(`${b.up?"▲":"▼"}${Math.abs(b.chg).toFixed(2)}%`,b.x,b.y+9);ctx.shadowBlur=0;
-        // 終端圓點
-        ctx.beginPath();ctx.arc(b.x,b.y-b.r,2.5,0,Math.PI*2);ctx.fillStyle=fillC;ctx.shadowColor=fillC;ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
+        ctx.strokeStyle=fillC;ctx.lineWidth=0.6;ctx.shadowColor=fillC;ctx.shadowBlur=2;ctx.stroke();ctx.shadowBlur=0;
+        ctx.fillStyle="#fff";ctx.textAlign="center";
+        ctx.font=`bold 7px 'Share Tech Mono',monospace`;ctx.fillText(b.label,b.x,b.y-2);
+        ctx.font=`6px 'Share Tech Mono',monospace`;ctx.fillStyle=b.up?C.green:C.red;
+        ctx.fillText(`${b.up?"▲":"▼"}${Math.abs(b.chg).toFixed(1)}%`,b.x,b.y+7);
       });
       raf=requestAnimationFrame(draw);
     };draw();return()=>cancelAnimationFrame(raf);
@@ -310,8 +394,8 @@ function IndicatorBubbles({DATA}){
   return(
     <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:16,position:"relative"}}>
       <GlitchBorder color={C.orange}/>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//INDICATOR_DELTA::REALTIME_VIZ</div>
-      <canvas ref={canvasRef} width={340} height={260} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:3,marginBottom:10}}>//INDICATOR_DELTA::NEURAL_VIZ</div>
+      <canvas ref={canvasRef} width={340} height={200} style={{width:"100%",borderRadius:2,border:`1px solid ${C.border}`}}/>
     </div>
   );
 }
@@ -399,29 +483,129 @@ function App(){
           <IndicatorBubbles DATA={DATA}/>
         </>}
         {tab==="indicators"&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:8}}>
-            {CARDS.map(({k,c})=>{const d=DATA[k];if(!d)return null;return<Card key={k} name={d.name} value={d.value} prev={d.prev} unit={d.unit} hist={HIST[k]} color={c}/>;  })}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
+            {CARDS.map(({k,c})=>{const d=DATA[k];if(!d)return null;
+              const chg=d.value-d.prev,pct=d.prev?(chg/Math.abs(d.prev))*100:0;
+              const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
+              const hist=HIST[k]||[];
+              const vals=hist.map(h=>h.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+              const W=280,H=90;
+              const pts=hist.map((h,i,a)=>{const x=(i/(a.length-1))*W,y=H-((h.value-mn)/rng)*(H-8)-4;return`${x},${y}`;}).join(" ");
+              const lastX=W,lastY=H-((hist[hist.length-1]?.value-mn)/rng)*(H-8)-4;
+              return(
+                <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:16,position:"relative"}}>
+                  <GlitchBorder color={c}/>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"flex-start"}}>
+                    <div>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:1,marginBottom:4}}>{d.name}</div>
+                      <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                        <span style={{fontSize:24,fontWeight:700,color:c,textShadow:`0 0 10px ${c}66`}}>{d.value.toFixed(dec)}</span>
+                        <span style={{fontSize:11,color:C.muted}}>{d.unit}</span>
+                      </div>
+                    </div>
+                    <span style={{fontSize:13,color:chg>0?C.green:C.red,fontWeight:700}}>{chg>0?"▲":"▼"}{Math.abs(pct).toFixed(2)}%</span>
+                  </div>
+                  <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                    <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
+                    <circle cx={lastX} cy={lastY} r={3} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
+                  </svg>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                    <span style={{fontSize:8,color:C.dim}}>{hist[0]?.date}</span>
+                    <span style={{fontSize:8,color:C.dim}}>{hist[hist.length-1]?.date}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-        {tab==="history"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <ScoreChart history={SCORE_HIST}/>
-            {CARDS.map(({k,c})=>{const obs=HIST[k],d=DATA[k];if(!obs||!d)return null;const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;return(
-              <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:11,position:"relative"}}>
-                <GlitchBorder color={c}/>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{fontSize:9,color:C.muted}}>{d.name}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:c,textShadow:`0 0 6px ${c}`}}>{d.value.toFixed(dec)} {d.unit}</span>
-                </div>
-                <MiniLine data={obs} color={c} h={44}/>
-                <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                  <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
-                  <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
-                </div>
-              </div>
-            );})}
-          </div>
-        )}
+        {tab==="history"&&(()=>{
+          const [collapsed,setCollapsed]=useState({});
+          const toggle=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
+          const H_FULL=120,PAD_L=52,PAD_R=12,PAD_T=8,PAD_B=20,W=560;
+          const makePath=(obs,h)=>{
+            const vals=obs.map(o=>o.value);const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+            return{pts:obs.map((o,i,a)=>{const x=PAD_L+(i/(a.length-1))*(W-PAD_L-PAD_R),y=PAD_T+(1-(o.value-mn)/rng)*(h-PAD_T-PAD_B);return`${x},${y}`;}).join(" "),mn,mx,rng,lastY:PAD_T+(1-(obs[obs.length-1].value-mn)/rng)*(h-PAD_T-PAD_B)};
+          };
+          return(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {/* 情緒歷史 */}
+              {(()=>{
+                const isCol=collapsed["__score"];
+                const H=isCol?0:H_FULL;
+                const cfg=[{k:"stock",c:C.green,l:"STOCK"},{k:"crypto",c:C.cyan,l:"CRYPTO"},{k:"gold",c:C.yellow,l:"GOLD"}];
+                const toPath=k=>SCORE_HIST.map((d,i)=>{const x=PAD_L+(i/(SCORE_HIST.length-1))*(W-PAD_L-PAD_R),y=H_FULL/2-(d[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return`${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+                return(
+                  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:12,position:"relative"}}>
+                    <GlitchBorder color={C.dim}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:8}}>
+                      <div style={{fontSize:9,color:C.muted,letterSpacing:3}}>//SENTIMENT_60D</div>
+                      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                        {!isCol&&cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:12,height:1.5,background:c}}/><span style={{fontSize:8,color:C.muted}}>{l}</span></div>))}
+                        <button onClick={()=>toggle("__score")} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[EXPAND]":"[FOLD]"}</button>
+                      </div>
+                    </div>
+                    {!isCol&&<>
+                      <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
+                        <line x1={PAD_L} y1={H_FULL/2} x2={W-PAD_R} y2={H_FULL/2} stroke={C.dim} strokeWidth={0.5} strokeDasharray="4 4"/>
+                        {[50,-50].map(v=>{const y=H_FULL/2-(v/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={v}><line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.3} strokeDasharray="2 6"/><text x={PAD_L-4} y={y+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">{v>0?"+":""}{v}</text></g>;})}
+                        <text x={PAD_L-4} y={H_FULL/2+3} textAnchor="end" fill={C.dim} fontSize={7} fontFamily="Share Tech Mono,monospace">0</text>
+                        {cfg.map(({k,c})=>{const last=SCORE_HIST[SCORE_HIST.length-1];const lx=PAD_L+(W-PAD_L-PAD_R),ly=H_FULL/2-(last[k]/100)*((H_FULL-PAD_T-PAD_B)/2);return<g key={k}><path d={toPath(k)} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/><circle cx={lx} cy={ly} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 4px ${c})`}}/></g>;})}
+                      </svg>
+                      <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+                        <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[0]?.date}</span>
+                        <span style={{fontSize:8,color:C.dim}}>{SCORE_HIST[SCORE_HIST.length-1]?.date}</span>
+                      </div>
+                    </>}
+                  </div>
+                );
+              })()}
+              {/* 各指標曲線 */}
+              {CARDS.map(({k,c})=>{
+                const obs=HIST[k],d=DATA[k];if(!obs||!d)return null;
+                const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
+                const isCol=collapsed[k];
+                const {pts,mn,mx,lastY}=makePath(obs,H_FULL);
+                // Y軸刻度
+                const steps=4;
+                const yTicks=Array.from({length:steps+1},(_,i)=>{const v=mn+(mx-mn)*i/steps;const y=PAD_T+(1-(v-mn)/(mx-mn||1))*(H_FULL-PAD_T-PAD_B);return{v,y};});
+                return(
+                  <div key={k} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,padding:"10px 12px",position:"relative"}}>
+                    <GlitchBorder color={c}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCol?0:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:10,color:C.muted}}>{d.name}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:c,textShadow:`0 0 5px ${c}`}}>{d.value.toFixed(dec)} {d.unit}</span>
+                      </div>
+                      <button onClick={()=>toggle(k)} style={{background:"transparent",border:`1px solid ${C.dim}`,color:C.muted,fontSize:8,padding:"2px 7px",borderRadius:2,cursor:"pointer",letterSpacing:1}}>{isCol?"[▼]":"[▲]"}</button>
+                    </div>
+                    {!isCol&&<>
+                      <svg width="100%" height={H_FULL} viewBox={`0 0 ${W} ${H_FULL}`} preserveAspectRatio="none">
+                        {/* Y軸 */}
+                        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H_FULL-PAD_B} stroke={C.dim} strokeWidth={0.5}/>
+                        {yTicks.map(({v,y},i)=>(
+                          <g key={i}>
+                            <line x1={PAD_L-3} y1={y} x2={PAD_L} y2={y} stroke={C.dim} strokeWidth={0.5}/>
+                            <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke={C.dim} strokeWidth={0.2} strokeDasharray="3 8"/>
+                            <text x={PAD_L-5} y={y+3} textAnchor="end" fill={C.dim} fontSize={6.5} fontFamily="Share Tech Mono,monospace">
+                              {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(dec>0?1:0)}
+                            </text>
+                          </g>
+                        ))}
+                        {/* 曲線 */}
+                        <polyline points={pts} fill="none" stroke={c} strokeWidth={0.8} strokeLinejoin="round" style={{filter:`drop-shadow(0 0 1px ${c})`}}/>
+                        <circle cx={W-PAD_R} cy={lastY} r={2.5} fill={c} style={{filter:`drop-shadow(0 0 5px ${c})`}}/>
+                      </svg>
+                      <div style={{display:"flex",justifyContent:"space-between",marginTop:2,paddingLeft:PAD_L}}>
+                        <span style={{fontSize:8,color:C.dim}}>{obs[0]?.date}</span>
+                        <span style={{fontSize:8,color:C.dim}}>{obs[obs.length-1]?.date}</span>
+                      </div>
+                    </>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
