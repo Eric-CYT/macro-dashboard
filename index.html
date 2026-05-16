@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宏觀流動性儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#080b10;color:#f0f0f0;font-family:'DM Sans',sans-serif}
+  ::-webkit-scrollbar{width:3px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px}
+  @keyframes fi{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes sk{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+  @keyframes pu{0%,100%{opacity:.3}50%{opacity:1}}
+  @keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .fi{animation:fi .6s ease forwards}
+  .sk{animation:sk .4s ease}
+  .pu{animation:pu 2s ease infinite}
+  .up{animation:up .4s ease forwards}
+  input:focus{outline:none}
+  button{font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+const PASSWORD = "Ericzone";
+
+// ── 數據（更新時修改這裡）────────────────────────────────
+const DATA = {
+  WALCL:     { value: 6714,  prev: 6698,  unit: "十億USD", name: "聯準會資產負債表" },
+  M2SL:      { value: 21540, prev: 21480, unit: "十億USD", name: "M2 貨幣供給" },
+  FEDFUNDS:  { value: 3.58,  prev: 3.58,  unit: "%",       name: "聯邦基金利率" },
+  RRPONTSYD: { value: 180,   prev: 210,   unit: "十億USD", name: "隔夜逆回購" },
+  DGS2:      { value: 3.95,  prev: 4.02,  unit: "%",       name: "2年期美債殖利率" },
+  DGS10:     { value: 4.46,  prev: 4.52,  unit: "%",       name: "10年期美債殖利率" },
+  VIX:       { value: 17.9,  prev: 19.4,  unit: "",        name: "VIX 恐慌指數" },
+  DXY:       { value: 98.6,  prev: 100.2, unit: "",        name: "美元指數" },
+  GOLD:      { value: 4693,  prev: 4748,  unit: "USD/oz",  name: "黃金" },
+  BTC_D:     { value: 58.4,  prev: 57.1,  unit: "%",       name: "BTC 主導率" },
+  USDT_D:    { value: 6.4,   prev: 6.6,   unit: "%",       name: "USDT 主導率" },
+  USDC_D:    { value: 2.7,   prev: 2.8,   unit: "%",       name: "USDC 主導率" },
+  date: "2026-05-14",
+};
+
+// ── 歷史模擬 ──────────────────────────────────────────────
+function buildHistory() {
+  const seed = n => { const x = Math.sin(n)*10000; return x-Math.floor(x); };
+  const keys = Object.keys(DATA).filter(k=>k!=="date");
+  const hist = {};
+  keys.forEach((k,ki)=>{
+    const cur=DATA[k].value, prev=DATA[k].prev, trend=cur-prev;
+    const pts=[];
+    for(let i=59;i>=0;i--){
+      const noise=(seed(ki*100+i)-0.48)*Math.abs(trend||cur*0.006)*4;
+      const val=cur-trend*(i/59)+noise*(i/60);
+      const d=new Date("2026-05-14"); d.setDate(d.getDate()-i);
+      pts.push({date:d.toISOString().slice(0,10),value:Math.max(0.01,val)});
+    }
+    pts[58].value=prev; pts[59].value=cur;
+    hist[k]=pts;
+  });
+  return hist;
+}
+
+function sdelta(v,p,dir){
+  if(!v||!p||p===0) return 0;
+  return Math.max(-1,Math.min(1,((v-p)/Math.abs(p))*100*dir));
+}
+function getScores(d){
+  const s=(k,dir)=>sdelta(d[k]?.value,d[k]?.prev,dir);
+  const stock  = s("VIX",-1)*25+s("DXY",-1)*25+s("DGS10",-1)*25+s("FEDFUNDS",-1)*25;
+  const crypto = s("USDT_D",-1)*35+s("BTC_D",-1)*15+s("DXY",-1)*25+s("FEDFUNDS",-1)*25;
+  const gold   = s("GOLD",1)*55+s("DXY",-1)*25+s("DGS10",-1)*20;
+  const n=v=>Math.round(Math.max(-100,Math.min(100,v)));
+  return {stock:n(stock),crypto:n(crypto),gold:n(gold)};
+}
+function getAlloc(scores){
+  const BASE={stock:55,gold:35,crypto:10};
+  const raw={
+    stock: Math.max(5,BASE.stock +(scores.stock /100)*10),
+    gold:  Math.max(5,BASE.gold  +(scores.gold  /100)*10),
+    crypto:Math.max(5,BASE.crypto+(scores.crypto/100)*10),
+  };
+  const total=raw.stock+raw.gold+raw.crypto;
+  return{stock:Math.round(raw.stock/total*100),gold:Math.round(raw.gold/total*100),crypto:Math.round(raw.crypto/total*100)};
+}
+function buildScoreHist(hist){
+  return hist.WALCL.slice(1).map((_,i)=>{
+    const snap={};
+    Object.keys(DATA).filter(k=>k!=="date").forEach(k=>{
+      if(hist[k]?.[i+1]&&hist[k]?.[i]) snap[k]={value:hist[k][i+1].value,prev:hist[k][i].value};
+    });
+    return{date:hist.WALCL[i+1].date,...getScores(snap)};
+  });
+}
+const HIST=buildHistory();
+const SCORE_HIST=buildScoreHist(HIST);
+
+// ── 元件 ──────────────────────────────────────────────────
+function Login({onLogin}){
+  const [pw,setPw]=useState(""); const [err,setErr]=useState(false); const [shake,setShake]=useState(false);
+  const go=()=>{ if(pw===PASSWORD) onLogin(); else{setErr(true);setShake(true);setTimeout(()=>setShake(false),500);}};
+  return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#080b10,#0d1117,#080d14)"}}>
+      <div className="fi" style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:16,padding:"44px 36px",width:300,backdropFilter:"blur(20px)"}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div className="pu" style={{fontSize:10,letterSpacing:4,color:"#4ade80",fontFamily:"'DM Mono',monospace",marginBottom:12}}>◆ MACRO TERMINAL</div>
+          <div style={{fontSize:20,fontWeight:600,color:"#f0f0f0"}}>宏觀流動性儀表板</div>
+          <div style={{fontSize:11,color:"#555",marginTop:5}}>授權人員專用</div>
+        </div>
+        <div className={shake?"sk":""}>
+          <input type="password" placeholder="輸入存取密碼" value={pw}
+            onChange={e=>{setPw(e.target.value);setErr(false);}}
+            onKeyDown={e=>e.key==="Enter"&&go()}
+            style={{width:"100%",padding:"11px 14px",background:"rgba(255,255,255,.05)",border:`1px solid ${err?"#f87171":"rgba(255,255,255,.1)"}`,borderRadius:8,color:"#f0f0f0",fontSize:13,fontFamily:"'DM Mono',monospace",boxSizing:"border-box",marginBottom:7}}/>
+          {err&&<div style={{color:"#f87171",fontSize:11,marginBottom:7}}>密碼錯誤</div>}
+          <button onClick={go} style={{width:"100%",padding:"11px",background:"linear-gradient(135deg,#4ade80,#22d3ee)",border:"none",borderRadius:8,color:"#080b10",fontSize:13,fontWeight:600,cursor:"pointer"}}>進入</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Gauge({label,value,color}){
+  const pct=(value+100)/200;
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
+      <div style={{fontSize:18,fontWeight:600,color,fontFamily:"'DM Mono',monospace",marginBottom:8}}>{value>0?"+":""}{value}</div>
+      <div style={{position:"relative",height:8,borderRadius:4,background:"rgba(255,255,255,.08)",marginBottom:6}}>
+        <div style={{position:"absolute",left:"50%",top:-2,width:1,height:12,background:"rgba(255,255,255,.2)"}}/>
+        {value>=0?(
+          <div style={{position:"absolute",left:"50%",top:0,width:`${pct*100-50}%`,height:"100%",borderRadius:"0 4px 4px 0",background:color,opacity:.85}}/>
+        ):(
+          <div style={{position:"absolute",right:"50%",top:0,width:`${50-pct*100}%`,height:"100%",borderRadius:"4px 0 0 4px",background:color,opacity:.6}}/>
+        )}
+        <div style={{position:"absolute",top:-3,left:`${pct*100}%`,transform:"translateX(-50%)",width:6,height:14,borderRadius:3,background:color}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#444",marginBottom:6}}>
+        <span>−100</span><span>0</span><span>+100</span>
+      </div>
+      <div style={{fontSize:9,color:"#777"}}>{label}</div>
+      <div style={{fontSize:8,marginTop:5,padding:"2px 8px",borderRadius:20,display:"inline-block",background:value>20?"rgba(74,222,128,.15)":value<-20?"rgba(248,113,113,.15)":"rgba(250,204,21,.15)",color:value>20?"#4ade80":value<-20?"#f87171":"#facc15"}}>
+        {value>20?"偏多":value<-20?"偏空":"中性"}
+      </div>
+    </div>
+  );
+}
+
+function MiniLine({data,color,h=44}){
+  if(!data||data.length<2) return <div style={{height:h,background:"rgba(255,255,255,.03)",borderRadius:6}}/>;
+  const vals=data.map(d=>d.value); const mn=Math.min(...vals),mx=Math.max(...vals),rng=mx-mn||1;
+  const pts=data.map((d,i,a)=>{const x=(i/(a.length-1))*220,y=h-((d.value-mn)/rng)*(h-4)-2;return `${x},${y}`;}).join(" ");
+  return(<svg width="100%" height={h} viewBox={`0 0 220 ${h}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round"/></svg>);
+}
+
+function Card({name,value,prev,unit,hist,color}){
+  const chg=value-prev, pct=prev?(chg/Math.abs(prev))*100:0;
+  const dec=unit==="%"?2:unit==="十億USD"?0:unit==="USD/oz"?1:3;
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,padding:13}}>
+      <div style={{fontSize:10,color:"#555",marginBottom:4}}>{name}</div>
+      <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:6}}>
+        <span style={{fontSize:17,fontWeight:600,color:"#f0f0f0",fontFamily:"'DM Mono',monospace"}}>{value.toFixed(dec)}</span>
+        <span style={{fontSize:9,color:"#444"}}>{unit}</span>
+        <span style={{fontSize:10,color:chg>0?"#4ade80":"#f87171",marginLeft:"auto"}}>{chg>0?"▲":"▼"}{Math.abs(pct).toFixed(2)}%</span>
+      </div>
+      <MiniLine data={hist||[]} color={color}/>
+    </div>
+  );
+}
+
+function Donut({scores}){
+  const alloc=getAlloc(scores);
+  const items=[
+    {label:"股票",v:alloc.stock, color:"#4ade80",base:55,adj:Math.round(scores.stock /100*10)},
+    {label:"黃金",v:alloc.gold,  color:"#facc15",base:35,adj:Math.round(scores.gold  /100*10)},
+    {label:"加密",v:alloc.crypto,color:"#22d3ee",base:10,adj:Math.round(scores.crypto/100*10)},
+  ];
+  const total=items.reduce((s,i)=>s+i.v,0)||1;
+  const cx=75,cy=75,r=58,ir=34; let cum=-90;
+  const slices=items.map(item=>{
+    const ang=(item.v/total)*360,sa=cum,ea=cum+ang; cum+=ang;
+    const tr=d=>d*Math.PI/180;
+    const x1=cx+r*Math.cos(tr(sa)),y1=cy+r*Math.sin(tr(sa)),x2=cx+r*Math.cos(tr(ea)),y2=cy+r*Math.sin(tr(ea));
+    const ix1=cx+ir*Math.cos(tr(sa)),iy1=cy+ir*Math.sin(tr(sa)),ix2=cx+ir*Math.cos(tr(ea)),iy2=cy+ir*Math.sin(tr(ea));
+    const lg=ang>180?1:0;
+    return{...item,d:`M${ix1} ${iy1} L${x1} ${y1} A${r} ${r} 0 ${lg} 1 ${x2} ${y2} L${ix2} ${iy2} A${ir} ${ir} 0 ${lg} 0 ${ix1} ${iy1}Z`};
+  });
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:16,padding:18}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:2,marginBottom:3}}>資金佔比估算</div>
+      <div style={{fontSize:9,color:"#444",marginBottom:14}}>市值加權基礎（股票55 / 黃金35 / 加密10）± 情緒微調</div>
+      <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        <svg width={150} height={150} viewBox="0 0 150 150">
+          {slices.map((s,i)=><path key={i} d={s.d} fill={s.color} opacity={.88}/>)}
+          <circle cx={cx} cy={cy} r={ir-2} fill="#0d1117"/>
+        </svg>
+        <div style={{display:"flex",flexDirection:"column",gap:10,flex:1,minWidth:120}}>
+          {slices.map((s,i)=>(
+            <div key={i}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <div style={{width:10,height:10,borderRadius:2,background:s.color,flexShrink:0}}/>
+                <span style={{fontSize:13,color:"#ccc"}}>{s.label}</span>
+                <span style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'DM Mono',monospace",marginLeft:"auto"}}>{s.v}%</span>
+              </div>
+              <div style={{fontSize:9,color:"#444",marginLeft:17,marginTop:1}}>基礎 {s.base}% {s.adj>=0?`+${s.adj}`:s.adj}% 情緒調整</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreChart({history}){
+  if(!history||history.length<2) return null;
+  const W=560,H=110;
+  const cfg=[{k:"stock",c:"#4ade80",l:"股票"},{k:"crypto",c:"#22d3ee",l:"加密"},{k:"gold",c:"#facc15",l:"黃金"}];
+  const toPath=k=>history.map((d,i)=>{const x=(i/(history.length-1))*W,y=H/2-(d[k]/100)*(H/2-8);return `${i===0?"M":"L"}${x} ${y}`;}).join(" ");
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:16,padding:18,marginTop:12}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:2,marginBottom:8}}>情緒分數歷史（近60日）</div>
+      <div style={{display:"flex",gap:14,marginBottom:8}}>
+        {cfg.map(({k,c,l})=>(<div key={k} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:16,height:2,background:c}}/><span style={{fontSize:10,color:"#777"}}>{l}</span></div>))}
+      </div>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <line x1={0} y1={H/2} x2={W} y2={H/2} stroke="rgba(255,255,255,.07)" strokeWidth={1} strokeDasharray="4 4"/>
+        {cfg.map(({k,c})=><path key={k} d={toPath(k)} fill="none" stroke={c} strokeWidth={1.8} strokeLinejoin="round"/>)}
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+        <span style={{fontSize:9,color:"#333"}}>{history[0]?.date}</span>
+        <span style={{fontSize:9,color:"#333"}}>{history[history.length-1]?.date}</span>
+      </div>
+    </div>
+  );
+}
+
+function MarketBubbles({scores}){
+  const alloc=getAlloc(scores);
+  const markets=[
+    {label:"美股",pct:alloc.stock, color:"#4ade80",score:scores.stock },
+    {label:"黃金",pct:alloc.gold,  color:"#facc15",score:scores.gold  },
+    {label:"加密",pct:alloc.crypto,color:"#22d3ee",score:scores.crypto},
+  ];
+  const maxPct=Math.max(...markets.map(m=>m.pct));
+  const getR=pct=>32+(pct/maxPct)*48;
+  const sorted=[...markets].sort((a,b)=>b.pct-a.pct);
+  const positions=[{x:85,y:105},{x:185,y:95},{x:270,y:115}];
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:16,padding:16,marginBottom:12}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:2,marginBottom:4}}>資金佔比泡泡圖</div>
+      <div style={{fontSize:9,color:"#444",marginBottom:10}}>泡泡大小 = 市值加權佔比，顏色深淺 = 情緒方向</div>
+      <svg width="100%" height={200} viewBox="0 0 320 200">
+        {sorted.map((m,i)=>{
+          const r=getR(m.pct),{x,y}=positions[i];
+          const alpha=m.score>0?0.5+(m.score/100)*0.4:0.2+(1+m.score/100)*0.3;
+          return(<g key={m.label}>
+            <circle cx={x} cy={y} r={r+6} fill={m.color} opacity={0.06}/>
+            <circle cx={x} cy={y} r={r+2} fill={m.color} opacity={0.1}/>
+            <circle cx={x} cy={y} r={r} fill={m.color} opacity={alpha}/>
+            <circle cx={x} cy={y} r={r} fill="none" stroke={m.color} strokeWidth={1.5} opacity={0.6}/>
+            <text x={x} y={y-6} textAnchor="middle" fill="#fff" fontSize={13} fontWeight="600" fontFamily="DM Sans,sans-serif">{m.label}</text>
+            <text x={x} y={y+10} textAnchor="middle" fill="#fff" fontSize={16} fontWeight="700" fontFamily="DM Mono,monospace">{m.pct}%</text>
+            <text x={x} y={y+24} textAnchor="middle" fill="#fff" fontSize={9} opacity={0.7}>{m.score>0?"+":""}{m.score}</text>
+          </g>);
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function IndicatorBubbles(){
+  const items=[
+    {key:"WALCL",label:"WALCL",color:"#4ade80"},{key:"M2SL",label:"M2",color:"#4ade80"},
+    {key:"FEDFUNDS",label:"利率",color:"#22d3ee"},{key:"RRPONTSYD",label:"逆回購",color:"#22d3ee"},
+    {key:"DGS2",label:"2Y殖利",color:"#a78bfa"},{key:"DGS10",label:"10Y殖利",color:"#a78bfa"},
+    {key:"VIX",label:"VIX",color:"#f87171"},{key:"DXY",label:"DXY",color:"#fbbf24"},
+    {key:"GOLD",label:"黃金",color:"#facc15"},{key:"BTC_D",label:"BTC.D",color:"#f97316"},
+    {key:"USDT_D",label:"USDT.D",color:"#34d399"},{key:"USDC_D",label:"USDC.D",color:"#38bdf8"},
+  ];
+  const withChange=items.map(item=>{
+    const d=DATA[item.key];
+    const chg=d.prev?((d.value-d.prev)/Math.abs(d.prev))*100:0;
+    return{...item,chg};
+  });
+  const maxAbs=Math.max(...withChange.map(i=>Math.abs(i.chg)),0.01);
+  const getR=chg=>22+(Math.abs(chg)/maxAbs)*30;
+  const W=320,cols=4,colW=W/cols,rowH=90;
+  const positions=withChange.map((_,i)=>({x:colW*(i%cols)+colW/2,y:rowH*Math.floor(i/cols)+rowH/2}));
+  return(
+    <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:16,padding:16}}>
+      <div style={{fontSize:10,color:"#555",letterSpacing:2,marginBottom:4}}>指標變化泡泡圖</div>
+      <div style={{fontSize:9,color:"#444",marginBottom:10}}>泡泡大小 = 變化幅度，綠色 = 上漲，紅色 = 下跌</div>
+      <svg width="100%" height={270} viewBox="0 0 320 270">
+        {withChange.map((item,i)=>{
+          const r=getR(item.chg),{x,y}=positions[i];
+          const up=item.chg>=0,fillColor=up?item.color:"#f87171";
+          const alpha=0.15+Math.abs(item.chg)/maxAbs*0.5;
+          return(<g key={item.key}>
+            <circle cx={x} cy={y} r={r+3} fill={fillColor} opacity={0.07}/>
+            <circle cx={x} cy={y} r={r} fill={fillColor} opacity={alpha}/>
+            <circle cx={x} cy={y} r={r} fill="none" stroke={fillColor} strokeWidth={1.2} opacity={0.7}/>
+            <text x={x} y={y-4} textAnchor="middle" fill="#ddd" fontSize={9} fontFamily="DM Sans,sans-serif">{item.label}</text>
+            <text x={x} y={y+8} textAnchor="middle" fill={up?"#4ade80":"#f87171"} fontSize={9} fontWeight="600" fontFamily="DM Mono,monospace">
+              {up?"▲":"▼"}{Math.abs(item.chg).toFixed(2)}%
+            </text>
+          </g>);
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function App(){
+  const [authed,setAuthed]=useState(false);
+  const [tab,setTab]=useState("dashboard");
+  if(!authed) return <Login onLogin={()=>setAuthed(true)}/>;
+
+  const scores=getScores(DATA);
+  const printing=DATA.WALCL.value>DATA.WALCL.prev||DATA.M2SL.value>DATA.M2SL.prev;
+  const ff=DATA.FEDFUNDS;
+  const rate=ff.value<ff.prev?"降息":ff.value>ff.prev?"升息":"持平";
+  const CARDS=[
+    {k:"WALCL",c:"#4ade80"},{k:"M2SL",c:"#4ade80"},
+    {k:"FEDFUNDS",c:"#22d3ee"},{k:"RRPONTSYD",c:"#22d3ee"},
+    {k:"DGS2",c:"#a78bfa"},{k:"DGS10",c:"#a78bfa"},
+    {k:"VIX",c:"#f87171"},{k:"DXY",c:"#fbbf24"},
+    {k:"GOLD",c:"#facc15"},{k:"BTC_D",c:"#f97316"},
+    {k:"USDT_D",c:"#34d399"},{k:"USDC_D",c:"#38bdf8"},
+  ];
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#080b10,#0d1117,#080d14)",color:"#f0f0f0",paddingBottom:40}}>
+      <div style={{background:"rgba(255,255,255,.02)",borderBottom:"1px solid rgba(255,255,255,.05)",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
+        <div>
+          <div style={{fontSize:8,letterSpacing:3,color:"#4ade80",fontFamily:"'DM Mono',monospace"}}>◆ MACRO TERMINAL</div>
+          <div style={{fontSize:14,fontWeight:600}}>宏觀流動性儀表板</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:8,color:"#444",fontFamily:"'DM Mono',monospace"}}>數據日期</div>
+          <div style={{fontSize:10,color:"#4ade80",fontFamily:"'DM Mono',monospace"}}>{DATA.date}</div>
+        </div>
+      </div>
+
+      <div style={{padding:"10px 16px 0",display:"flex",gap:2,borderBottom:"1px solid rgba(255,255,255,.05)"}}>
+        {[["dashboard","總覽"],["bubbles","泡泡圖"],["indicators","指標詳情"],["history","歷史曲線"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{padding:"7px 11px",borderRadius:"8px 8px 0 0",fontSize:11,cursor:"pointer",border:"none",background:tab===k?"rgba(255,255,255,.05)":"transparent",color:tab===k?"#f0f0f0":"#555",borderBottom:tab===k?"2px solid #4ade80":"2px solid transparent"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:"14px 16px"}} className="up">
+
+        {tab==="dashboard" && <>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+            <div style={{background:"rgba(255,255,255,.03)",border:`1px solid ${printing?"rgba(74,222,128,.2)":"rgba(248,113,113,.2)"}`,borderRadius:11,padding:"10px"}}>
+              <div style={{fontSize:9,color:"#555",marginBottom:3}}>印鈔狀態</div>
+              <div style={{fontSize:12,fontWeight:600,color:printing?"#4ade80":"#f87171"}}>{printing?"📈 擴表中":"📉 縮表中"}</div>
+            </div>
+            <div style={{background:"rgba(255,255,255,.03)",border:`1px solid ${rate==="降息"?"rgba(74,222,128,.2)":rate==="升息"?"rgba(248,113,113,.2)":"rgba(250,204,21,.2)"}`,borderRadius:11,padding:"10px"}}>
+              <div style={{fontSize:9,color:"#555",marginBottom:3}}>利率狀態</div>
+              <div style={{fontSize:12,fontWeight:600,color:rate==="降息"?"#4ade80":rate==="升息"?"#f87171":"#facc15"}}>{rate==="降息"?"🟢":rate==="升息"?"🔴":"🟡"} {rate}</div>
+            </div>
+            <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(34,211,238,.15)",borderRadius:11,padding:"10px"}}>
+              <div style={{fontSize:9,color:"#555",marginBottom:3}}>基金利率</div>
+              <div style={{fontSize:14,fontWeight:600,color:"#22d3ee",fontFamily:"'DM Mono',monospace"}}>{ff.value.toFixed(2)}%</div>
+              <div style={{fontSize:9,color:"#444"}}>前值 {ff.prev.toFixed(2)}%</div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+            <Gauge label="股票市場情緒" value={scores.stock}  color="#4ade80"/>
+            <Gauge label="加密市場情緒" value={scores.crypto} color="#22d3ee"/>
+            <Gauge label="黃金市場情緒" value={scores.gold}   color="#facc15"/>
+          </div>
+          <Donut scores={scores}/>
+          <ScoreChart history={SCORE_HIST}/>
+          <div style={{marginTop:12,padding:"9px 12px",background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.05)",borderRadius:9,fontSize:10,color:"#444"}}>
+            💡 數據更新：告訴 Claude 即可自動更新
+          </div>
+        </>}
+
+        {tab==="bubbles" && <>
+          <MarketBubbles scores={scores}/>
+          <IndicatorBubbles/>
+        </>}
+
+        {tab==="indicators" && (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:9}}>
+            {CARDS.map(({k,c})=>{const d=DATA[k];if(!d)return null;return <Card key={k} name={d.name} value={d.value} prev={d.prev} unit={d.unit} hist={HIST[k]} color={c}/>;  })}
+          </div>
+        )}
+
+        {tab==="history" && (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <ScoreChart history={SCORE_HIST}/>
+            {CARDS.map(({k,c})=>{
+              const obs=HIST[k],d=DATA[k]; if(!obs||!d)return null;
+              const dec=d.unit==="%"?2:d.unit==="十億USD"?0:d.unit==="USD/oz"?1:3;
+              return(
+                <div key={k} style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:11,padding:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                    <span style={{fontSize:11,color:"#777"}}>{d.name}</span>
+                    <span style={{fontSize:12,fontWeight:600,fontFamily:"'DM Mono',monospace",color:c}}>{d.value.toFixed(dec)} {d.unit}</span>
+                  </div>
+                  <MiniLine data={obs} color={c} h={50}/>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
+                    <span style={{fontSize:9,color:"#333"}}>{obs[0]?.date}</span>
+                    <span style={{fontSize:9,color:"#333"}}>{obs[obs.length-1]?.date}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
